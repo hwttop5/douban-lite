@@ -1,0 +1,24 @@
+{
+  "name": "douban-lite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --workspace @douban-lite/api\" \"npm run dev --workspace @douban-lite/web\"",
+    "build": "npm run build --workspace @douban-lite/shared && npm run build --workspace @douban-lite/api && npm run build --workspace @douban-lite/web",
+    "test": "npm run test --workspace @douban-lite/shared && npm run test --workspace @douban-lite/api && npm run test --workspace @douban-lite/web",
+    "typecheck": "npm run typecheck --workspace @douban-lite/shared && npm run typecheck --workspace @douban-lite/api && npm run typecheck --workspace @douban-lite/web"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "concurrently": "^9.2.1",
+    "tsup": "^8.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

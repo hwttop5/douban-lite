@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.vite/
+.DS_Store
+data/*.db
+data/*.db-*
+apps/api/data/*.db
+apps/api/data/*.db-*
+apps/api/test-output/
+.codex-run/
+.playwright-mcp/
+/*.png
