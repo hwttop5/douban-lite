@@ -62,7 +62,13 @@ export function TimelinePage() {
       </section>
 
       {timelineQuery.data?.stale ? <p className="notice">实时抓取失败，当前显示最近一次缓存。</p> : null}
-      {timelineQuery.error ? <p className="form-error">{timelineQuery.error.message}</p> : null}
+      {timelineQuery.error ? (
+        <section className="timeline-state-panel" role="status">
+          <strong>动态暂时不可用</strong>
+          <p className="supporting">请确认豆瓣 Cookie 已导入且本地 API 正常运行，稍后重新打开动态页。</p>
+          <p className="form-error">{timelineQuery.error.message}</p>
+        </section>
+      ) : null}
 
       <div className="timeline-list">
         {timelineQuery.isFetching ? <p className="empty-state">正在读取豆瓣动态...</p> : null}

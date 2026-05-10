@@ -6,7 +6,22 @@ import { registerSW } from "virtual:pwa-register";
 import { App } from "./App";
 import "./styles.css";
 
-registerSW({ immediate: true });
+if (import.meta.env.DEV) {
+  void navigator.serviceWorker?.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      void registration.unregister();
+    }
+  });
+  void window.caches?.keys().then((keys) => {
+    for (const key of keys) {
+      if (key.startsWith("douban-lite") || key.startsWith("workbox")) {
+        void window.caches.delete(key);
+      }
+    }
+  });
+} else {
+  registerSW({ immediate: true });
+}
 
 const queryClient = new QueryClient();
 
@@ -19,4 +34,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
-

@@ -42,10 +42,10 @@ export function MyPage() {
   return (
     <div className="page my-page">
       <section className="profile-layout">
-        <div className="profile-hero">
+        <div className={hasSession ? "profile-hero profile-hero--logged-in" : "profile-hero profile-hero--logged-out"}>
           <div className="profile-hero__backdrop" />
           <div className="profile-hero__avatar">
-            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}
+            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{hasSession ? "" : "?"}</span>}
           </div>
           <button className="profile-hero__settings" type="button" onClick={() => navigate("/settings")}>
             {hasSession ? "偏好设置" : "请登录"}
@@ -66,29 +66,29 @@ export function MyPage() {
         </div>
 
         <div className="profile-content">
-          <section className="hero-card hero-card--compact">
-            <div>
-              <p className="eyebrow">douban-lite</p>
-              <h1>我的{mediumLabels[medium]}</h1>
-              <p className="supporting">集中查看收藏、评分和同步状态，快速回到最近整理的条目。</p>
-            </div>
-            <div className="hero-card__stats">
-              <strong>{hasSession ? (total ?? 0) : 0}</strong>
-              <span>条内容</span>
-            </div>
-          </section>
-
-          <section className="stats-grid" aria-label="收藏统计">
-            {mediumTotals.map((item) => (
-              <div className="stat-card" key={item.medium}>
-                <strong>{hasSession ? item.count : 0}</strong>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </section>
-
           {hasSession ? (
             <>
+              <section className="hero-card hero-card--compact">
+                <div>
+                  <p className="eyebrow">douban-lite</p>
+                  <h1>我的{mediumLabels[medium]}</h1>
+                  <p className="supporting">集中查看收藏、评分和同步状态，快速回到最近整理的条目。</p>
+                </div>
+                <div className="hero-card__stats">
+                  <strong>{total ?? 0}</strong>
+                  <span>条内容</span>
+                </div>
+              </section>
+
+              <section className="stats-grid" aria-label="收藏统计">
+                {mediumTotals.map((item) => (
+                  <div className="stat-card" key={item.medium}>
+                    <strong>{item.count}</strong>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </section>
+
               <SegmentedControl
                 value={status}
                 options={shelfStatuses.map((item) => ({

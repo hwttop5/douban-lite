@@ -18,12 +18,12 @@ export function SearchPage() {
 
   return (
     <div className="page search-page">
-      <section className="page-header">
-        <p className="eyebrow">搜索</p>
-        <h1>搜索条目</h1>
-        <p className="supporting">按当前媒介搜索豆瓣条目，结果会直接进入详情页。</p>
-      </section>
       <section className="search-panel">
+        <div className="page-header">
+          <p className="eyebrow">搜索</p>
+          <h1>搜索条目</h1>
+          <p className="supporting">按当前媒介搜索豆瓣条目，结果会直接进入详情页。</p>
+        </div>
         <label className="field">
           <span>关键词</span>
           <input
@@ -44,9 +44,17 @@ export function SearchPage() {
         {searchQuery.data?.items.map((item) => (
           <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={item.medium} subject={item} />
         ))}
-        {deferredQuery.length === 0 ? <p className="empty-state">输入关键词后开始搜索。</p> : null}
+        {deferredQuery.length === 0 ? (
+          <section className="empty-state empty-state-panel" role="status">
+            <strong>还没有搜索结果</strong>
+            <span>输入关键词后开始搜索。</span>
+          </section>
+        ) : null}
         {deferredQuery.length > 0 && !searchQuery.isFetching && searchQuery.data?.items.length === 0 ? (
-          <p className="empty-state">没有找到结果，可以换个关键词试试。</p>
+          <section className="empty-state empty-state-panel" role="status">
+            <strong>没有找到结果</strong>
+            <span>换个更短的关键词，或切换电影、图书、音乐、游戏。</span>
+          </section>
         ) : null}
       </div>
     </div>

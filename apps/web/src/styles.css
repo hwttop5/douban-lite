@@ -84,11 +84,13 @@ button:disabled {
 .page {
   display: grid;
   gap: 16px;
+  align-content: start;
 }
 
 .page {
   width: min(100%, 1180px);
   margin-inline: auto;
+  align-items: start;
 }
 
 .page-header {
@@ -240,7 +242,9 @@ button:disabled {
 }
 
 .segmented-control {
+  align-self: start;
   display: flex;
+  align-items: center;
   gap: 8px;
   max-width: 100%;
   overflow-x: auto;
@@ -264,7 +268,7 @@ button:disabled {
 .segmented-control__button {
   flex: 0 0 auto;
   max-width: min(48vw, 180px);
-  min-height: 40px;
+  height: 40px;
   border: 0;
   border-radius: 999px;
   padding: 0 16px;
@@ -373,11 +377,57 @@ button:disabled {
 .profile-hero__avatar span {
   width: 44px;
   height: 44px;
-  display: block;
+  display: grid;
+  place-items: center;
   background:
     linear-gradient(var(--accent), var(--accent)) 6px 20px / 32px 5px no-repeat,
     linear-gradient(var(--accent), var(--accent)) 10px 29px / 24px 5px no-repeat,
     linear-gradient(var(--accent), var(--accent)) 14px 38px / 16px 5px no-repeat;
+  color: var(--accent);
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.profile-hero--logged-in .profile-hero__avatar {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+}
+
+.profile-hero--logged-out .profile-hero__avatar {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  width: 72px;
+  height: 72px;
+}
+
+.profile-hero--logged-out .profile-hero__avatar span {
+  background: none;
+}
+
+.profile-hero__backdrop::after {
+  content: "";
+  position: absolute;
+  right: -42px;
+  bottom: -58px;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.profile-hero--logged-out .profile-hero__info {
+  left: 28px;
+  right: 28px;
+  bottom: 30px;
+}
+
+.profile-hero--logged-out .profile-hero__info h1 {
+  max-width: 100%;
+  font-size: clamp(30px, 7vw, 42px);
+  overflow-wrap: anywhere;
 }
 
 .profile-hero__settings {
@@ -605,15 +655,65 @@ button:disabled {
 }
 
 .search-panel {
+  display: grid;
+  gap: 18px;
   border-radius: 8px;
-  padding: 16px;
+  padding: 20px;
 }
 
 .search-results-grid {
   min-width: 0;
 }
 
+.search-results-grid > .empty-state,
+.timeline-list > .empty-state,
+.timeline-state-panel {
+  width: min(100%, 540px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: 0 18px 54px rgba(22, 68, 37, 0.06);
+}
+
+.empty-state-panel {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.empty-state-panel strong {
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.empty-state-panel span {
+  max-width: 46ch;
+  color: var(--muted);
+}
+
+.search-results-grid > .empty-state-panel {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.timeline-state-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-state-panel strong,
+.search-results-grid > .empty-state strong,
+.timeline-list > .empty-state strong {
+  color: var(--ink);
+}
+
 .rankings-page > .segmented-control {
+  align-self: start;
   justify-self: start;
   width: min(100%, 720px);
 }
@@ -626,6 +726,11 @@ button:disabled {
 .settings-page > .panel,
 .settings-page > section:not(.page-header) {
   min-width: 0;
+}
+
+.settings-page > .panel > .settings-actions {
+  justify-content: flex-start;
+  width: auto;
 }
 
 .panel__header {
@@ -700,6 +805,11 @@ button:disabled {
 
 .form-error {
   color: var(--danger);
+}
+
+.timeline-state-panel .form-error,
+.panel .form-error {
+  margin-top: 0;
 }
 
 .notice {
@@ -1205,8 +1315,7 @@ button:disabled {
     align-items: start;
   }
 
-  .search-page .page-header,
-  .search-page .search-panel {
+  .search-page > .search-panel {
     grid-column: 1;
   }
 
@@ -1224,7 +1333,7 @@ button:disabled {
   }
 }
 
-@media (min-width: 1180px) {
+@media (min-width: 1100px) {
   .app-shell {
     display: grid;
     grid-template-columns: 252px minmax(0, 1fr);
@@ -1375,8 +1484,17 @@ button:disabled {
     grid-template-columns: 340px minmax(0, 1fr);
   }
 
+  .search-panel .page-header h1 {
+    font-size: 54px;
+  }
+
   .search-results-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .search-results-grid > .empty-state-panel {
+    min-height: 218px;
+    padding: 32px;
   }
 
   .settings-page {
