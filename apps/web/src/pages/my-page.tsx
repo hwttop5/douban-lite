@@ -44,24 +44,27 @@ export function MyPage() {
       <section className="profile-layout">
         <div className={hasSession ? "profile-hero profile-hero--logged-in" : "profile-hero profile-hero--logged-out"}>
           <div className="profile-hero__backdrop" />
-          <div className="profile-hero__avatar">
-            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{hasSession ? "" : "?"}</span>}
-          </div>
           <button className="profile-hero__settings" type="button" onClick={() => navigate("/settings")}>
             {hasSession ? "偏好设置" : "请登录"}
           </button>
           {hasSession ? (
-            <div className="profile-hero__info">
-              <p className="eyebrow">已登录 / {ipLocation}</p>
-              <h1>{displayName}</h1>
-              <p>ID: {peopleId}</p>
+            <div className="profile-hero__identity">
+              <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}</div>
+              <div className="profile-hero__info">
+                <h1>{displayName}</h1>
+                <p className="eyebrow">已登录 / {ipLocation}</p>
+                <p>ID: {peopleId}</p>
+              </div>
             </div>
           ) : (
-            <div className="profile-hero__info">
-              <p className="eyebrow">未登录</p>
-              <h1>连接豆瓣收藏</h1>
-              <p>导入 Cookie 后同步收藏、评分和标记。</p>
-            </div>
+            <>
+              <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span>?</span>}</div>
+              <div className="profile-hero__info">
+                <p className="eyebrow">未登录</p>
+                <h1>连接豆瓣收藏</h1>
+                <p>导入 Cookie 后同步收藏、评分和标记。</p>
+              </div>
+            </>
           )}
         </div>
 

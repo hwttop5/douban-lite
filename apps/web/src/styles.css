@@ -389,10 +389,24 @@ button:disabled {
   line-height: 1;
 }
 
-.profile-hero--logged-in .profile-hero__avatar {
+.profile-hero__identity {
   position: absolute;
-  top: 28px;
-  left: 28px;
+  z-index: 1;
+}
+
+.profile-hero--logged-in .profile-hero__identity {
+  inset: 0 22px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.profile-hero--logged-in .profile-hero__avatar {
+  position: static;
+  width: clamp(86px, 22vw, 118px);
+  height: clamp(86px, 22vw, 118px);
 }
 
 .profile-hero--logged-out .profile-hero__avatar {
@@ -455,9 +469,22 @@ button:disabled {
   z-index: 1;
 }
 
+.profile-hero--logged-in .profile-hero__info {
+  position: static;
+  display: grid;
+  justify-items: center;
+  max-width: 100%;
+}
+
 .profile-hero__info h1 {
   margin-top: 4px;
   font-size: clamp(32px, 9vw, 42px);
+}
+
+.profile-hero--logged-in .profile-hero__info h1 {
+  margin-top: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .profile-hero__info p {
