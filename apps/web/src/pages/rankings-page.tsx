@@ -32,11 +32,13 @@ export function RankingsPage() {
         <h1>{rankingQuery.data?.board.name ?? activeBoard.name}</h1>
         {rankingQuery.data?.stale ? <p className="notice">刷新失败，当前显示最近一次缓存。</p> : null}
       </section>
-      <SegmentedControl
-        value={activeBoardKey}
-        options={boards.map((board) => ({ value: board.key, label: board.name }))}
-        onChange={setBoardKey}
-      />
+      {boards.length > 1 ? (
+        <SegmentedControl
+          value={activeBoardKey}
+          options={boards.map((board) => ({ value: board.key, label: board.name }))}
+          onChange={setBoardKey}
+        />
+      ) : null}
       <div className="card-grid">
         {rankingQuery.isFetching ? <p className="empty-state">正在更新榜单...</p> : null}
         {rankingQuery.error ? <p className="form-error">{rankingQuery.error.message}</p> : null}

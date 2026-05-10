@@ -101,6 +101,7 @@ export interface DoubanSessionStatus {
   peopleId: string | null;
   displayName: string | null;
   avatarUrl: string | null;
+  ipLocation?: string | null;
   lastCheckedAt: string | null;
   lastError: string | null;
 }
@@ -202,17 +203,17 @@ export const boardCatalog: Record<Medium, RankingBoardConfig[]> = {
     { key: "showing", name: "正在热映", path: "https://movie.douban.com/cinema/nowplaying/beijing/", sourceType: "movie_showing" },
     { key: "hot-movies", name: "热门电影", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门" },
     { key: "hot-tv", name: "热门电视剧", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门电视剧" },
-    { key: "top250", name: "豆瓣电影TOP250", path: "https://movie.douban.com/top250", sourceType: "html_list" }
+    { key: "top250", name: "TOP250", path: "https://movie.douban.com/top250", sourceType: "html_list" }
   ],
   music: [
-    { key: "weekly-artists", name: "本周流行音乐人", path: "https://music.douban.com/", sourceType: "homepage_section", sectionTitle: "本周流行音乐人" },
-    { key: "rising-artists", name: "上升最快音乐人", path: "https://music.douban.com/", sourceType: "homepage_section", sectionTitle: "上升最快音乐人" },
+    { key: "weekly-artists", name: "本周流行", path: "https://music.douban.com/", sourceType: "homepage_section", sectionTitle: "本周流行音乐人" },
+    { key: "rising-artists", name: "上升最快", path: "https://music.douban.com/", sourceType: "homepage_section", sectionTitle: "上升最快音乐人" },
     { key: "new-albums", name: "新碟榜", path: "https://music.douban.com/chart", sourceType: "html_list" }
   ],
   book: [
     { key: "new-books", name: "新书速递", path: "https://book.douban.com/latest", sourceType: "html_list" },
-    { key: "monthly-hot", name: "每月热门图书榜", path: "https://book.douban.com/chart?subcat=all", sourceType: "html_list" },
-    { key: "top250", name: "豆瓣图书250", path: "https://book.douban.com/top250", sourceType: "html_list" }
+    { key: "monthly-hot", name: "热门图书榜", path: "https://book.douban.com/chart?subcat=all", sourceType: "html_list" },
+    { key: "top250", name: "TOP250", path: "https://book.douban.com/top250", sourceType: "html_list" }
   ],
   game: [
     { key: "top500", name: "豆瓣游戏TOP500", path: "https://www.douban.com/doulist/122952913/", sourceType: "doulist", maxPages: 20 }

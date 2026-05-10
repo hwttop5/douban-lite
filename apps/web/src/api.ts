@@ -137,6 +137,12 @@ export function importDoubanSession(cookie: string) {
   });
 }
 
+export function logoutDoubanSession() {
+  return request<DoubanSessionStatus>("/api/settings/douban-session/logout", {
+    method: "POST"
+  });
+}
+
 export function getDoubanSessionStatus() {
   return request<DoubanSessionStatus>("/api/settings/douban-session/status");
 }

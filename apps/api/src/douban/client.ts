@@ -158,6 +158,7 @@ export class DoubanClient {
       peopleId: peopleId ?? profile.peopleId ?? parsePeopleId(text),
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
+      ipLocation: profile.ipLocation,
       status: "valid" as const
     };
   }

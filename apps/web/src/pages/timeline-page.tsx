@@ -1,5 +1,50 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { getTimeline, proxiedImageUrl } from "../api";
+
+function subjectRouteFromUrl(url: string | null) {
+  if (!url) {
+    return null;
+  }
+  const patterns: Array<[RegExp, string]> = [
+    [/movie\.douban\.com\/subject\/(\d+)/, "movie"],
+    [/music\.douban\.com\/subject\/(\d+)/, "music"],
+    [/book\.douban\.com\/subject\/(\d+)/, "book"],
+    [/douban\.com\/game\/(\d+)/, "game"]
+  ];
+  for (const [pattern, medium] of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) {
+      return `/subject/${medium}/${match[1]}`;
+    }
+  }
+  return null;
+}
+
+function splitTimelineContent(content: string | null) {
+  if (!content) {
+    return { rating: null, body: null };
+  }
+  const match = content.match(/^(\d(?:\.\d)?)\s+(.+)$/);
+  if (!match) {
+    return { rating: null, body: content };
+  }
+  return { rating: Number(match[1]), body: match[2] };
+}
+
+function renderStars(rating: number | null) {
+  if (!rating) {
+    return null;
+  }
+  const score = Math.max(1, Math.min(5, Math.round(rating / 2)));
+  return (
+    <span className="douban-stars timeline-subject__stars" aria-label={`${score} 星`}>
+      <span>{"★".repeat(score)}</span>
+      <span>{"★".repeat(5 - score)}</span>
+      <em>{rating.toFixed(1)}</em>
+    </span>
+  );
+}
 
 export function TimelinePage() {
   const timelineQuery = useQuery({
@@ -23,6 +68,18 @@ export function TimelinePage() {
         {timelineQuery.data?.items.map((item) => {
           const authorAvatarUrl = proxiedImageUrl(item.authorAvatarUrl);
           const subjectCoverUrl = proxiedImageUrl(item.subjectCoverUrl);
+          const content = splitTimelineContent(item.content);
+          const subjectRoute = subjectRouteFromUrl(item.subjectUrl);
+          const subjectContent = (
+            <>
+              {subjectCoverUrl ? <img src={subjectCoverUrl} alt="" /> : <span className="timeline-subject__placeholder">条目</span>}
+              <span className="timeline-subject__body">
+                <strong>{item.subjectTitle ?? "关联条目"}</strong>
+                {renderStars(content.rating)}
+                {content.body ? <span>{content.body}</span> : null}
+              </span>
+            </>
+          );
           return (
             <article className="timeline-card" key={item.id}>
               <div className="timeline-card__avatar">
@@ -36,21 +93,17 @@ export function TimelinePage() {
                   </div>
                   {item.createdAtText ? <span>{item.createdAtText}</span> : null}
                 </div>
-                {item.content ? <p className="timeline-card__content">{item.content}</p> : null}
+                {content.body && !item.subjectTitle ? <p className="timeline-card__content">{content.body}</p> : null}
                 {item.subjectTitle || item.subjectUrl ? (
-                  <a className="timeline-subject" href={item.subjectUrl ?? "#"} target="_blank" rel="noreferrer">
-                    {subjectCoverUrl ? <img src={subjectCoverUrl} alt="" /> : <span className="timeline-subject__placeholder">条目</span>}
-                    <span>{item.subjectTitle ?? "关联条目"}</span>
-                  </a>
-                ) : null}
-                {item.engagements.length > 0 ? (
-                  <div className="timeline-card__engagements">
-                    {item.engagements.map((engagement) => (
-                      <span key={engagement.label}>
-                        {engagement.count ?? ""} {engagement.label}
-                      </span>
-                    ))}
-                  </div>
+                  subjectRoute ? (
+                    <Link className="timeline-subject" to={subjectRoute}>
+                      {subjectContent}
+                    </Link>
+                  ) : (
+                    <a className="timeline-subject" href={item.subjectUrl ?? "#"} target="_blank" rel="noreferrer">
+                      {subjectContent}
+                    </a>
+                  )
                 ) : null}
               </div>
             </article>

@@ -165,6 +165,7 @@ export class AppDatabase {
         people_id TEXT,
         display_name TEXT,
         avatar_url TEXT,
+        ip_location TEXT,
         status TEXT NOT NULL,
         last_checked_at TEXT,
         last_error TEXT
@@ -172,6 +173,7 @@ export class AppDatabase {
     `);
     this.ensureColumn("douban_session", "display_name", "TEXT");
     this.ensureColumn("douban_session", "avatar_url", "TEXT");
+    this.ensureColumn("douban_session", "ip_location", "TEXT");
   }
 
   private ensureColumn(table: string, column: string, definition: string) {
@@ -197,7 +199,7 @@ export class AppDatabase {
           title = excluded.title,
           subtitle = excluded.subtitle,
           year = excluded.year,
-          cover_url = excluded.cover_url,
+          cover_url = COALESCE(excluded.cover_url, subjects.cover_url),
           average_rating = excluded.average_rating,
           summary = excluded.summary,
           creators_json = excluded.creators_json,
@@ -425,6 +427,7 @@ export class AppDatabase {
         peopleId: null,
         displayName: null,
         avatarUrl: null,
+        ipLocation: null,
         lastCheckedAt: null,
         lastError: null
       };
@@ -435,6 +438,7 @@ export class AppDatabase {
       peopleId: (row.people_id as string | null) ?? null,
       displayName: (row.display_name as string | null) ?? null,
       avatarUrl: (row.avatar_url as string | null) ?? null,
+      ipLocation: (row.ip_location as string | null) ?? null,
       lastCheckedAt: (row.last_checked_at as string | null) ?? null,
       lastError: (row.last_error as string | null) ?? null
     };
@@ -456,19 +460,21 @@ export class AppDatabase {
     peopleId: string | null;
     displayName?: string | null;
     avatarUrl?: string | null;
+    ipLocation?: string | null;
     status: DoubanSessionStatus["status"];
     lastCheckedAt?: string;
     lastError?: string | null;
   }) {
     this.db
       .prepare(`
-        INSERT INTO douban_session (id, cookie, people_id, display_name, avatar_url, status, last_checked_at, last_error)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO douban_session (id, cookie, people_id, display_name, avatar_url, ip_location, status, last_checked_at, last_error)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           cookie = excluded.cookie,
           people_id = excluded.people_id,
           display_name = COALESCE(excluded.display_name, douban_session.display_name),
           avatar_url = COALESCE(excluded.avatar_url, douban_session.avatar_url),
+          ip_location = COALESCE(excluded.ip_location, douban_session.ip_location),
           status = excluded.status,
           last_checked_at = excluded.last_checked_at,
           last_error = excluded.last_error
@@ -478,6 +484,7 @@ export class AppDatabase {
         input.peopleId,
         input.displayName ?? null,
         input.avatarUrl ?? null,
+        input.ipLocation ?? null,
         input.status,
         input.lastCheckedAt ?? nowIso(),
         input.lastError ?? null
@@ -492,6 +499,10 @@ export class AppDatabase {
         WHERE id = 1
       `)
       .run(status, errorMessage, nowIso());
+  }
+
+  clearDoubanSession() {
+    this.db.prepare(`DELETE FROM douban_session WHERE id = 1`).run();
   }
 
   saveRankingSnapshot(medium: Medium, board: RankingBoardConfig, items: RankingItem[], fetchedAt = nowIso()) {

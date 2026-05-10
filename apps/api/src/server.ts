@@ -60,6 +60,12 @@ function allowedOrigins(origin: string | null) {
       parsed.hostname = "127.0.0.1";
       origins.add(parsed.toString().replace(/\/$/, ""));
     }
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      for (let port = 5173; port <= 5179; port += 1) {
+        origins.add(`http://localhost:${port}`);
+        origins.add(`http://127.0.0.1:${port}`);
+      }
+    }
   } catch {
     // Keep the configured origin as-is.
   }
@@ -121,26 +127,30 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     response.json(sync.getOverview());
   });
 
-  app.get("/api/library", (request, response) => {
-    const medium = mediumSchema.safeParse(request.query.medium);
-    const status = request.query.status == null ? null : shelfStatusSchema.safeParse(request.query.status);
-    const pagination = paginationSchema.safeParse(request.query);
-    if (!medium.success || (status != null && !status.success) || !pagination.success) {
-      badRequest(response, "Invalid library query", {
-        medium: medium.success ? null : medium.error.flatten(),
-        status: status == null || status.success ? null : status.error.flatten(),
-        pagination: pagination.success ? null : pagination.error.flatten()
-      });
-      return;
+  app.get("/api/library", async (request, response, next) => {
+    try {
+      const medium = mediumSchema.safeParse(request.query.medium);
+      const status = request.query.status == null ? null : shelfStatusSchema.safeParse(request.query.status);
+      const pagination = paginationSchema.safeParse(request.query);
+      if (!medium.success || (status != null && !status.success) || !pagination.success) {
+        badRequest(response, "Invalid library query", {
+          medium: medium.success ? null : medium.error.flatten(),
+          status: status == null || status.success ? null : status.error.flatten(),
+          pagination: pagination.success ? null : pagination.error.flatten()
+        });
+        return;
+      }
+      response.json(
+        await sync.listLibrary({
+          medium: medium.data,
+          status: status?.success ? status.data : undefined,
+          page: pagination.data.page,
+          pageSize: pagination.data.pageSize
+        })
+      );
+    } catch (error) {
+      next(error);
     }
-    response.json(
-      sync.listLibrary({
-        medium: medium.data,
-        status: status?.success ? status.data : undefined,
-        page: pagination.data.page,
-        pageSize: pagination.data.pageSize
-      })
-    );
   });
 
   app.get("/api/subjects/search", async (request, response, next) => {
@@ -245,6 +255,10 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.post("/api/settings/douban-session/logout", (_request, response) => {
+    response.json(sync.logoutDoubanSession());
   });
 
   app.get("/api/settings/douban-session/status", (_request, response) => {

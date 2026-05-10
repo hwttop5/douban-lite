@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { LibraryEntry, Medium, SubjectRecord } from "../../../../packages/shared/src";
 import { statusLabels } from "../../../../packages/shared/src";
 import { proxiedImageUrl } from "../api";
@@ -29,10 +29,14 @@ function renderSyncState(syncState: LibraryEntry["syncState"]) {
 }
 
 export function SubjectCard({ medium, subject, item, extra }: SubjectCardProps) {
+  const location = useLocation();
   const externalUrl = typeof subject.metadata.externalUrl === "string" ? subject.metadata.externalUrl : null;
   const externalOnly = subject.metadata.externalOnly === "true";
   const coverUrl = proxiedImageUrl(subject.coverUrl);
   const className = "subject-card";
+  const detailState = location.pathname.startsWith("/rankings") || location.pathname.startsWith("/search") || location.pathname.startsWith("/me")
+    ? { from: location.pathname }
+    : undefined;
   const content = (
     <>
       <div className="subject-card__cover">
@@ -56,7 +60,6 @@ export function SubjectCard({ medium, subject, item, extra }: SubjectCardProps) 
             <span className="tag">{statusLabels[medium][item.status]}</span>
           </div>
         ) : null}
-        {item?.errorMessage ? <p className="subject-card__error">{item.errorMessage}</p> : null}
         {extra}
       </div>
     </>
@@ -71,7 +74,7 @@ export function SubjectCard({ medium, subject, item, extra }: SubjectCardProps) 
   }
 
   return (
-    <Link to={`/subject/${medium}/${subject.doubanId}`} className={className}>
+    <Link to={`/subject/${medium}/${subject.doubanId}`} state={detailState} className={className}>
       {content}
     </Link>
   );

@@ -20,7 +20,7 @@ export function SearchPage() {
     <div className="page">
       <section className="page-header">
         <p className="eyebrow">搜索</p>
-        <h1>查条目，回到自己的库</h1>
+        <h1>搜索条目</h1>
       </section>
       <label className="field">
         <span>关键词</span>

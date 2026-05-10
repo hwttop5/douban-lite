@@ -1,19 +1,66 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
-import type { SubjectComment } from "../../../../packages/shared/src";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import type { ShelfStatus, SubjectComment } from "../../../../packages/shared/src";
 import { mediumLabels, mediumSchema, statusLabels } from "../../../../packages/shared/src";
-import { getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
-import { StatusEditor } from "../components/status-editor";
+import { getDoubanSessionStatus, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
+
+function ratingLabelToScore(label: string | null) {
+  if (!label) {
+    return null;
+  }
+  const scores: Record<string, number> = {
+    力荐: 5,
+    推荐: 4,
+    还行: 3,
+    较差: 2,
+    很差: 1
+  };
+  return scores[label] ?? null;
+}
+
+function renderStars(score: number | null) {
+  if (!score) {
+    return null;
+  }
+  const normalized = Math.max(1, Math.min(5, Math.round(score)));
+  return (
+    <span className="douban-stars" aria-label={`${normalized} 星`}>
+      <span>{"★".repeat(normalized)}</span>
+      <span>{"★".repeat(5 - normalized)}</span>
+    </span>
+  );
+}
+
+function scoreFromAverage(average: number | null) {
+  return average ? Math.round(average / 2) : null;
+}
 
 export function SubjectDetailPage() {
   const queryClient = useQueryClient();
   const params = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const medium = mediumSchema.parse(params.medium);
   const doubanId = params.doubanId!;
+  const from = typeof location.state === "object" && location.state && "from" in location.state ? location.state.from : null;
+  const handleBack = () => {
+    if (from === "/rankings" || from === "/search" || from === "/me") {
+      navigate(from);
+      return;
+    }
+    navigate(-1);
+  };
 
   const detailQuery = useQuery({
     queryKey: ["subject", medium, doubanId],
     queryFn: () => getSubjectDetail(medium, doubanId)
+  });
+  const sessionQuery = useQuery({
+    queryKey: ["douban-session-status"],
+    queryFn: getDoubanSessionStatus
   });
 
   const commentsQuery = useQuery({
@@ -57,10 +104,52 @@ export function SubjectDetailPage() {
   const nextStart = commentsQuery.data?.nextStart ?? (comments.length > 0 ? comments.length : null);
   const hasMore = commentsQuery.data?.hasMore ?? comments.length > 0;
   const coverUrl = proxiedImageUrl(subject?.coverUrl);
+  const hasDoubanSession = sessionQuery.data?.status === "valid";
+  const sessionPending = sessionQuery.isPending;
+  const visibleUserItem = hasDoubanSession ? userItem : null;
+  const currentStatus = visibleUserItem?.status ?? "wish";
+  const currentRating = visibleUserItem?.rating ?? null;
+  const requireLoginThenMutate = (input: { status: ShelfStatus; rating: number | null }) => {
+    if (!hasDoubanSession) {
+      setLoginMessage("请先登录豆瓣后再标记和评分。");
+      return;
+    }
+    setLoginMessage(null);
+    mutation.mutate(input);
+  };
+  const handleShare = async () => {
+    if (!subject) {
+      return;
+    }
+    const url = window.location.href;
+    const shareData = {
+      title: subject.title,
+      text: subject.subtitle ? `${subject.title} - ${subject.subtitle}` : subject.title,
+      url
+    };
+    try {
+      if ("share" in navigator && typeof navigator.share === "function") {
+        await navigator.share(shareData);
+        setShareMessage("已打开分享");
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareMessage("链接已复制");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      setShareMessage("分享失败");
+    }
+    window.setTimeout(() => setShareMessage(null), 1800);
+  };
 
   if (detailQuery.isPending) {
     return (
       <div className="page">
+        <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
+          <span>‹</span>
+        </button>
         <p className="empty-state">载入条目详情中...</p>
       </div>
     );
@@ -69,6 +158,9 @@ export function SubjectDetailPage() {
   if (detailQuery.error || !subject) {
     return (
       <div className="page">
+        <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
+          <span>‹</span>
+        </button>
         <p className="form-error">{detailQuery.error?.message ?? "条目详情加载失败"}</p>
       </div>
     );
@@ -76,48 +168,108 @@ export function SubjectDetailPage() {
 
   return (
     <div className="page detail-page">
+      <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
+        <span>‹</span>
+      </button>
+      <button className="detail-share-button" type="button" onClick={handleShare} aria-label="分享">
+        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none">
+          <path d="M8.6 12.7 15.4 16.4" />
+          <path d="M15.4 7.6 8.6 11.3" />
+          <circle cx="6.4" cy="12" r="2.4" />
+          <circle cx="17.6" cy="6.4" r="2.4" />
+          <circle cx="17.6" cy="17.6" r="2.4" />
+        </svg>
+      </button>
+      {shareMessage ? <span className="detail-share-toast">{shareMessage}</span> : null}
       <section className="detail-hero">
         <div className="detail-hero__cover">
           {coverUrl ? <img src={coverUrl} alt={subject.title} /> : <span>无封面</span>}
         </div>
         <div className="detail-hero__body">
-          <p className="eyebrow">{mediumLabels[medium]}</p>
           <h1>{subject.title}</h1>
           {subject.subtitle ? <p className="subject-card__subtitle">{subject.subtitle}</p> : null}
           <p className="subject-card__meta">
-            {subject.averageRating ? `豆瓣 ${subject.averageRating.toFixed(1)}` : "暂无豆瓣评分"}
-            {subject.creators.length > 0 ? ` · ${subject.creators.join(" / ")}` : ""}
+            {mediumLabels[medium]}
+            {subject.year ? ` / ${subject.year.replace(/[()]/g, "")}` : ""}
+            {subject.creators.length > 0 ? ` / ${subject.creators.join(" / ")}` : ""}
           </p>
-          {subject.summary ? <p className="detail-summary">{subject.summary}</p> : null}
+        </div>
+        <div className="detail-hero__actions" aria-label="收藏状态">
+          {(Object.entries(statusLabels[medium]) as Array<[ShelfStatus, string]>).map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              disabled={mutation.isPending || sessionPending}
+              className={`${value === currentStatus && visibleUserItem ? "detail-action is-active" : "detail-action"}${!hasDoubanSession && !sessionPending ? " is-disabled" : ""}`}
+              onClick={() => requireLoginThenMutate({ status: value, rating: currentRating })}
+            >
+              <span>{value === "wish" ? "⊕" : value === "doing" ? "⊙" : "☆"}</span>
+              {label}
+            </button>
+          ))}
         </div>
       </section>
 
-      <section className="panel status-panel">
-        <div className="status-panel__header">
+      <section className="detail-rating-panel">
+        <div className={currentRating == null ? "detail-rating-card detail-rating-card--public-only" : "detail-rating-card"}>
           <div>
-            <strong>我的状态</strong>
-            <p>
-              当前：{userItem ? statusLabels[medium][userItem.status] : "未标记"}
-              {userItem?.rating ? ` · ${userItem.rating} 星` : ""}
-            </p>
+            <span>豆瓣评分</span>
+            <div className="detail-rating-card__score">
+              <strong>{subject.averageRating ? subject.averageRating.toFixed(1) : "暂无"}</strong>
+              {renderStars(scoreFromAverage(subject.averageRating))}
+            </div>
+            <p>{subject.averageRating ? "来自豆瓣公开评分" : "暂无公开评分"}</p>
           </div>
-          {userItem?.syncState ? <span className={`pill pill--${userItem.syncState}`}>{userItem.syncState === "synced" ? "已同步" : userItem.syncState === "pending_push" ? "待写回" : "需处理"}</span> : null}
+          {currentRating != null ? (
+            <div className="detail-my-rating">
+              <span>我的评分</span>
+              <div className="detail-my-rating__stars" aria-label="我的评分">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    type="button"
+                    key={value}
+                    disabled={mutation.isPending || sessionPending}
+                    className={value <= currentRating ? "is-active" : ""}
+                    onClick={() => requireLoginThenMutate({ status: currentStatus, rating: value })}
+                    aria-label={`${value} 星`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+              <button type="button" disabled={mutation.isPending || sessionPending} onClick={() => requireLoginThenMutate({ status: currentStatus, rating: null })}>
+                清空
+              </button>
+            </div>
+          ) : null}
         </div>
-        <StatusEditor
-          medium={medium}
-          status={userItem?.status ?? "wish"}
-          rating={userItem?.rating ?? null}
-          disabled={mutation.isPending}
-          onChange={(input) => mutation.mutate(input)}
-        />
+        <p className="detail-current-state">
+          当前：{visibleUserItem ? statusLabels[medium][visibleUserItem.status] : "未标记"}
+          {visibleUserItem?.rating ? ` · ${visibleUserItem.rating} 星` : ""}
+          {visibleUserItem?.syncState ? ` · ${visibleUserItem.syncState === "synced" ? "已同步" : visibleUserItem.syncState === "pending_push" ? "待写回" : "需处理"}` : ""}
+        </p>
+        {!hasDoubanSession && !sessionPending ? (
+          <p className="notice">
+            {loginMessage ?? "请先登录豆瓣后再标记和评分。"}
+            <button className="notice-link" type="button" onClick={() => navigate("/settings")}>去登录</button>
+          </p>
+        ) : loginMessage ? (
+          <p className="notice">{loginMessage}</p>
+        ) : null}
         {mutation.error ? <p className="form-error">{mutation.error.message}</p> : null}
       </section>
 
-      <section className="panel comments-panel">
+      {subject.summary ? (
+        <section className="detail-section detail-summary-section">
+          <h2>剧情简介</h2>
+          <p>{subject.summary}</p>
+        </section>
+      ) : null}
+
+      <section className="detail-section comments-panel">
         <div className="comments-panel__header">
           <div>
-            <strong>豆瓣短评</strong>
-            <p className="supporting">来自条目页的近期公开短评，用来快速判断口碑。</p>
+            <h2>短评</h2>
           </div>
           {commentsQuery.isFetching ? <span className="pill pill--info">读取中</span> : null}
         </div>
@@ -126,11 +278,16 @@ export function SubjectDetailPage() {
             {comments.map((comment, index) => (
               <article className="comment-card" key={comment.id ?? `${comment.author}-${index}`}>
                 <div className="comment-card__meta">
-                  <strong>{comment.author ?? "豆瓣用户"}</strong>
-                  <span>{comment.rating ?? comment.createdAt ?? ""}</span>
+                  <span className="comment-card__avatar">{comment.author?.slice(0, 1) ?? "豆"}</span>
+                  <div>
+                    <strong>{comment.author ?? "豆瓣用户"}</strong>
+                    {renderStars(ratingLabelToScore(comment.rating))}
+                    {comment.createdAt ? <time>{comment.createdAt}</time> : comment.rating ? <time>{comment.rating}</time> : null}
+                  </div>
+                  <button type="button" aria-label="更多">•••</button>
                 </div>
                 <p>{comment.content}</p>
-                {comment.votes ? <span className="comment-card__votes">{comment.votes} 有用</span> : null}
+                {comment.votes ? <span className="comment-card__votes">♡ {comment.votes}</span> : null}
               </article>
             ))}
           </div>

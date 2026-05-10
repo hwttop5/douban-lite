@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DoubanSessionStatus, SyncJobRecord } from "../../../../packages/shared/src";
-import { getDoubanSessionStatus, getSyncJob, importDoubanSession, triggerManualSync } from "../api";
+import { getDoubanSessionStatus, getSyncJob, importDoubanSession, logoutDoubanSession, triggerManualSync } from "../api";
 import { useAppContext } from "../app-context";
 
 const sessionStatusLabels: Record<DoubanSessionStatus["status"], string> = {
@@ -51,6 +51,17 @@ export function SettingsPage() {
     }
   });
 
+  const logoutMutation = useMutation({
+    mutationFn: logoutDoubanSession,
+    onSuccess: async () => {
+      setCookie("");
+      await queryClient.invalidateQueries({ queryKey: ["douban-session-status"] });
+      await queryClient.invalidateQueries({ queryKey: ["overview"] });
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
+      await queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    }
+  });
+
   const syncMutation = useMutation({
     mutationFn: triggerAndWaitForSync,
     onMutate: () => {
@@ -84,6 +95,14 @@ export function SettingsPage() {
       </div>
       {statusQuery.data?.displayName ? <p className="supporting">当前账号：{statusQuery.data.displayName}</p> : null}
       {statusQuery.data?.lastError ? <p className="form-error">{statusQuery.data.lastError}</p> : null}
+      {logoutMutation.error ? <p className="form-error">{logoutMutation.error.message}</p> : null}
+      {sessionStatus === "valid" ? (
+        <div className="settings-actions">
+          <button className="secondary-button secondary-button--danger" type="button" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}>
+            {logoutMutation.isPending ? "退出中..." : "退出登录"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 
@@ -118,7 +137,7 @@ export function SettingsPage() {
     <div className="page">
       <section className="page-header">
         <p className="eyebrow">设置</p>
-        <h1>同步节点与本机偏好</h1>
+        <h1>偏好设置</h1>
       </section>
 
       {showImport ? (
@@ -130,9 +149,11 @@ export function SettingsPage() {
             <textarea value={cookie} onChange={(event) => setCookie(event.target.value)} rows={6} placeholder="dbcl2=...; ck=...;" />
           </label>
           {importMutation.error ? <p className="form-error">{importMutation.error.message}</p> : null}
-          <button className="primary-button" type="button" onClick={() => importMutation.mutate()} disabled={importMutation.isPending || cookie.length < 10}>
-            {importMutation.isPending ? "验证中..." : "导入并验证"}
-          </button>
+          <div className="settings-actions">
+            <button className="primary-button" type="button" onClick={() => importMutation.mutate()} disabled={importMutation.isPending || cookie.length < 10}>
+              {importMutation.isPending ? "登录中..." : "导入并登录"}
+            </button>
+          </div>
         </section>
       ) : null}
 
@@ -145,9 +166,11 @@ export function SettingsPage() {
             <strong>同步任务</strong>
             <p>手动触发一次全量拉取，后台会继续串行处理写回队列。</p>
           </div>
-          <button className="secondary-button" type="button" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-            {syncMutation.isPending ? "同步中..." : "立即同步"}
-          </button>
+          <div className="settings-actions">
+            <button className="secondary-button" type="button" onClick={() => syncMutation.mutate()} disabled={sessionStatus !== "valid" || syncMutation.isPending}>
+              {sessionStatus !== "valid" ? "请先登录" : syncMutation.isPending ? "同步中..." : "立即同步"}
+            </button>
+          </div>
         </div>
         {syncMessage ? <p className={syncMessage.includes("失败") ? "form-error" : "notice"}>{syncMessage}</p> : null}
       </section>

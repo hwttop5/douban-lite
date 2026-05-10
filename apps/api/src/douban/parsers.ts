@@ -304,10 +304,15 @@ export function parseDoubanProfile(html: string, baseUrl: string) {
     profileImage.attr("src") ??
     $("#db-usr-profile img, .userface img, img.userface, img.avatar").first().attr("src") ??
     $("a[href*='/people/'] img").first().attr("src");
+  const pageText = $("body").text().replace(/\s+/g, " ");
+  const ipLocation =
+    safeText(pageText.match(/IP\s*(?:属地|屬地)?\s*[:：]\s*([^\s/]+)/i)?.[1]) ??
+    safeText(pageText.match(/IP\s+([^\s/]+)/i)?.[1]);
   return {
     peopleId,
     displayName,
-    avatarUrl: avatar ? new URL(avatar, baseUrl).toString() : null
+    avatarUrl: avatar ? new URL(avatar, baseUrl).toString() : null,
+    ipLocation
   };
 }
 
@@ -784,6 +789,8 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
         : objectId
           ? `https://${targetType === "book" ? "book" : targetType === "music" ? "music" : "movie"}.douban.com/subject/${objectId}/`
           : null;
+    const rawSubjectUrl = absoluteUrl(baseUrl, subjectLink.attr("href"));
+    const subjectUrl = rawSubjectUrl && extractDoubanId(rawSubjectUrl) ? rawSubjectUrl : fallbackSubjectUrl ?? rawSubjectUrl;
 
     items.push({
       id,
@@ -795,7 +802,7 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
       createdAtText,
       detailUrl: absoluteUrl(baseUrl, detailLink.attr("href")),
       subjectTitle,
-      subjectUrl: absoluteUrl(baseUrl, subjectLink.attr("href")) ?? fallbackSubjectUrl,
+      subjectUrl,
       subjectCoverUrl: subjectImage.attr("src") ? new URL(subjectImage.attr("src")!, baseUrl).toString() : null,
       engagements: parseEngagements(fullText)
     });

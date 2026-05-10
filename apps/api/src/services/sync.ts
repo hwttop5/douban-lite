@@ -64,6 +64,7 @@ export class SyncService {
       peopleId: validation.peopleId ?? null,
       displayName: validation.displayName ?? null,
       avatarUrl: validation.avatarUrl ?? null,
+      ipLocation: validation.ipLocation ?? null,
       status: validation.status,
       lastCheckedAt: nowIso(),
       lastError: null
@@ -71,6 +72,12 @@ export class SyncService {
     this.db.addSyncEvent("info", "豆瓣登录态已更新", {
       peopleId: validation.peopleId
     });
+    return this.db.getDoubanSessionStatus();
+  }
+
+  logoutDoubanSession() {
+    this.db.clearDoubanSession();
+    this.db.addSyncEvent("info", "豆瓣登录态已退出", {});
     return this.db.getDoubanSessionStatus();
   }
 
@@ -117,7 +124,7 @@ export class SyncService {
       }
     }
 
-    const userItem = this.db.getUserItem(medium, doubanId);
+    const userItem = session?.cookie ? this.db.getUserItem(medium, doubanId) : null;
     if (!subject) {
       throw new Error("Subject not found");
     }
@@ -194,12 +201,56 @@ export class SyncService {
     }
   }
 
-  listLibrary(input: { medium: Medium; status?: ShelfStatus; page: number; pageSize: number }): LibraryResponse {
-    return this.db.listLibrary(input);
+  async listLibrary(input: { medium: Medium; status?: ShelfStatus; page: number; pageSize: number }): Promise<LibraryResponse> {
+    const session = this.db.getDoubanCookie();
+    if (!session?.cookie) {
+      return {
+        items: [],
+        pagination: {
+          page: input.page,
+          pageSize: input.pageSize,
+          total: 0,
+          hasMore: false
+        }
+      };
+    }
+
+    const response = this.db.listLibrary(input);
+    const missingCoverItems = response.items.filter((item) => !item.subject.coverUrl);
+    if (missingCoverItems.length === 0) {
+      return response;
+    }
+
+    let refreshed = false;
+    for (const item of missingCoverItems) {
+      try {
+        const detail = await this.client.getSubjectDetail(item.medium, item.doubanId, session?.cookie);
+        this.db.upsertSubject(detail.subject);
+        refreshed = refreshed || Boolean(detail.subject.coverUrl);
+      } catch (error) {
+        this.db.addSyncEvent("warn", "条目封面补全失败，继续返回本地镜像", {
+          medium: item.medium,
+          doubanId: item.doubanId,
+          message: error instanceof Error ? error.message : "Unknown cover refresh error"
+        });
+      }
+    }
+
+    return refreshed ? this.db.listLibrary(input) : response;
   }
 
   getOverview() {
-    return this.db.getOverview();
+    const overview = this.db.getOverview();
+    const session = this.db.getDoubanCookie();
+    if (!session?.cookie) {
+      return {
+        ...overview,
+        totals: [],
+        recentItems: [],
+        lastSyncJob: null
+      };
+    }
+    return overview;
   }
 
   listSyncEvents(limit = 50) {
@@ -211,10 +262,12 @@ export class SyncService {
   }
 
   async triggerManualPull() {
+    this.requireSession();
     return this.enqueueJob("manual_pull");
   }
 
   async updateLibraryState(medium: Medium, doubanId: string, nextState: { status: ShelfStatus; rating: number | null }) {
+    this.requireSession();
     const detail = await this.getSubjectDetail(medium, doubanId);
     this.db.upsertUserItem({
       medium,
@@ -289,7 +342,7 @@ export class SyncService {
   private requireSession() {
     const session = this.db.getDoubanCookie();
     if (!session?.cookie) {
-      throw new Error("Douban session is missing.");
+      throw new Error("请先登录豆瓣。");
     }
     return session;
   }
@@ -305,6 +358,7 @@ export class SyncService {
       peopleId: validation.peopleId,
       displayName: validation.displayName ?? null,
       avatarUrl: validation.avatarUrl ?? null,
+      ipLocation: validation.ipLocation ?? null,
       status: "valid",
       lastCheckedAt: nowIso(),
       lastError: null
