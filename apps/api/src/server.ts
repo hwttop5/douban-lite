@@ -1,9 +1,9 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Express, Request, Response } from "express";
 import {
-  appLoginSchema,
   importDoubanSessionSchema,
   mediumSchema,
   paginationSchema,
@@ -11,7 +11,6 @@ import {
   timelineScopeSchema,
   updateLibraryStateSchema
 } from "../../../packages/shared/src";
-import { AuthService } from "./middleware/auth";
 import type { AppConfig } from "./config";
 import { loadConfig } from "./config";
 import { AppDatabase } from "./db";
@@ -22,7 +21,6 @@ export interface AppContext {
   app: Express;
   config: AppConfig;
   db: AppDatabase;
-  auth: AuthService;
   sync: SyncService;
   close: () => void;
 }
@@ -72,10 +70,21 @@ function allowedOrigins(origin: string | null) {
   return Array.from(origins);
 }
 
+function serveWebApp(app: Express, webDistDir: string) {
+  const indexFile = join(webDistDir, "index.html");
+  if (!existsSync(indexFile)) {
+    return;
+  }
+
+  app.use(express.static(webDistDir));
+  app.get(/^\/(?!api(?:\/|$)|health$).*/, (_request, response) => {
+    response.sendFile(indexFile);
+  });
+}
+
 export function createApp(overrides?: Partial<AppConfig>): AppContext {
   const config = { ...loadConfig(), ...overrides };
   const db = new AppDatabase(config.databaseFile);
-  const auth = new AuthService(config);
   const client = new DoubanClient(config);
   const sync = new SyncService(db, client, config);
   const app = express();
@@ -86,7 +95,6 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       credentials: true
     })
   );
-  app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_request, response) => {
@@ -95,32 +103,6 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       app: "douban-lite",
       schedulerEnabled: !config.disableAutoSync
     });
-  });
-
-  app.get("/api/auth/session", (request, response) => {
-    response.json({
-      authenticated: auth.isAuthenticated(request.cookies?.dl_session as string | undefined)
-    });
-  });
-
-  app.post("/api/auth/login", (request, response) => {
-    const parsed = appLoginSchema.safeParse(request.body);
-    if (!parsed.success) {
-      badRequest(response, "Invalid login payload", parsed.error.flatten());
-      return;
-    }
-    if (!auth.validatePassword(parsed.data.password)) {
-      response.status(401).json({ error: "Invalid password" });
-      return;
-    }
-    response.cookie("dl_session", auth.createSession(), auth.getCookieOptions());
-    response.json({ authenticated: true });
-  });
-
-  app.post("/api/auth/logout", (request, response) => {
-    auth.destroySession(request.cookies?.dl_session as string | undefined);
-    response.clearCookie("dl_session");
-    response.json({ authenticated: false });
   });
 
   app.get("/api/me/overview", (_request, response) => {
@@ -323,6 +305,8 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     response.json({ items: sync.listSyncEvents() });
   });
 
+  serveWebApp(app, config.webDistDir);
+
   app.use((error: unknown, _request: Request, response: Response, _next: unknown) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     response.status(500).json({ error: message });
@@ -332,7 +316,6 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     app,
     config,
     db,
-    auth,
     sync,
     close: () => {
       sync.stop();

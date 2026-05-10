@@ -17,8 +17,6 @@ describe("API integration", () => {
     mock = await createMockDoubanServer();
     dbFile = join(tmpdir(), `douban-lite-${randomUUID()}.db`);
     context = createApp({
-      appPassword: "test-pass",
-      sessionSecret: "test-secret",
       databaseFile: dbFile,
       dataDir: tmpdir(),
       doubanPublicBaseUrl: mock.url,
@@ -27,7 +25,6 @@ describe("API integration", () => {
       allowedOrigin: null
     });
     agent = request.agent(context.app);
-    await agent.post("/api/auth/login").send({ password: "test-pass" }).expect(200);
   });
 
   afterEach(async () => {

@@ -3,6 +3,13 @@ dist/
 coverage/
 .vite/
 .DS_Store
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 data/*.db
 data/*.db-*
 apps/api/data/*.db
@@ -10,4 +17,5 @@ apps/api/data/*.db-*
 apps/api/test-output/
 .codex-run/
 .playwright-mcp/
+design/
 /*.png

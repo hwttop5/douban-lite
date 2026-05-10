@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: douban-lite
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.0
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: ./data
+      - key: DOUBAN_PUBLIC_BASE_URL
+        value: https://m.douban.com
+      - key: DOUBAN_WEB_BASE_URL
+        value: https://www.douban.com
+      - key: SYNC_INTERVAL_HOURS
+        value: "12"
+      - key: DISABLE_AUTO_SYNC
+        value: "false"

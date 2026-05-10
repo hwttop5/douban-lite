@@ -226,10 +226,6 @@ export const syncStateSchema = z.enum(syncStates);
 export const syncJobTypeSchema = z.enum(syncJobTypes);
 export const timelineScopeSchema = z.enum(timelineScopes);
 
-export const appLoginSchema = z.object({
-  password: z.string().min(1, "password is required")
-});
-
 export const importDoubanSessionSchema = z.object({
   cookie: z.string().min(10, "cookie looks too short")
 });

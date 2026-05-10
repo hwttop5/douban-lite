@@ -14,7 +14,7 @@ import type {
   TimelineScope
 } from "../../../packages/shared/src";
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8788";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export function proxiedImageUrl(url: string | null | undefined) {
   if (!url) {
@@ -56,23 +56,6 @@ async function request<T>(path: string, options: RequestInit = {}) {
     throw new ApiError(typeof payload === "string" ? payload : payload.error ?? "Request failed", response.status);
   }
   return payload as T;
-}
-
-export function getSession() {
-  return request<{ authenticated: boolean }>("/api/auth/session");
-}
-
-export function login(password: string) {
-  return request<{ authenticated: boolean }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ password })
-  });
-}
-
-export function logout() {
-  return request<{ authenticated: boolean }>("/api/auth/logout", {
-    method: "POST"
-  });
 }
 
 export function getOverview() {

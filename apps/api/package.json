@@ -11,16 +11,13 @@
   },
   "dependencies": {
     "cheerio": "^1.1.2",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.1.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4"
   }
 }
-

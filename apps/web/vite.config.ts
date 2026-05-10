@@ -47,6 +47,16 @@ export default defineConfig({
     setupFiles: ["src/test/setup.ts"]
   },
   server: {
-    port: 5173
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8787",
+        changeOrigin: true
+      },
+      "/health": {
+        target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8787",
+        changeOrigin: true
+      }
+    }
   }
 });

@@ -17,8 +17,6 @@ describe("End-to-end sync flow", () => {
     mock = await createMockDoubanServer();
     dbFile = join(tmpdir(), `douban-lite-${randomUUID()}.db`);
     context = createApp({
-      appPassword: "test-pass",
-      sessionSecret: "test-secret",
       databaseFile: dbFile,
       dataDir: tmpdir(),
       doubanPublicBaseUrl: mock.url,
@@ -27,7 +25,6 @@ describe("End-to-end sync flow", () => {
       allowedOrigin: null
     });
     agent = request.agent(context.app);
-    await agent.post("/api/auth/login").send({ password: "test-pass" }).expect(200);
     await agent.post("/api/settings/douban-session/import").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
     await agent.post("/api/sync/pull").send({}).expect(200);
     await context.sync.drainQueue();

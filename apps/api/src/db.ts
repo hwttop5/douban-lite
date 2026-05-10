@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import type {
   DoubanSessionStatus,
   LibraryEntry,
@@ -23,6 +23,8 @@ import type {
   UserItemRecord
 } from "../../../packages/shared/src";
 import { shelfStatuses } from "../../../packages/shared/src";
+
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
 type Row = Record<string, unknown>;
 
@@ -91,7 +93,7 @@ function mapJob(row: Row): SyncJobRecord {
 }
 
 export class AppDatabase {
-  private readonly db: DatabaseSync;
+  private readonly db: InstanceType<typeof DatabaseSync>;
 
   constructor(file: string) {
     mkdirSync(dirname(file), { recursive: true });
