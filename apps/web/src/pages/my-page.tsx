@@ -29,65 +29,93 @@ export function MyPage() {
   const peopleId = session?.peopleId ?? "未获取";
   const ipLocation = session?.ipLocation ?? "未获取";
   const avatarUrl = hasSession ? proxiedImageUrl(session.avatarUrl) : null;
-  const total = overviewQuery.data?.totals
+  const totals = overviewQuery.data?.totals ?? [];
+  const total = totals
     .filter((item) => item.medium === medium)
     .reduce((sum, item) => sum + item.count, 0);
+  const mediumTotals = ["movie", "book", "music", "game"].map((item) => ({
+    medium: item as typeof medium,
+    label: mediumLabels[item as typeof medium],
+    count: totals.filter((totalItem) => totalItem.medium === item).reduce((sum, totalItem) => sum + totalItem.count, 0)
+  }));
 
   return (
     <div className="page my-page">
-      <section className="profile-hero">
-        <div className="profile-hero__backdrop" />
-        <div className="profile-hero__avatar">
-          {avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}
-        </div>
-        <button className="profile-hero__settings" type="button" onClick={() => navigate("/settings")}>
-          {hasSession ? "偏好设置" : "请登录"}
-        </button>
-        {hasSession ? (
-          <div className="profile-hero__info">
-            <h1>{displayName}</h1>
-            <p>ID: {peopleId} / IP: {ipLocation}</p>
+      <section className="profile-layout">
+        <div className="profile-hero">
+          <div className="profile-hero__backdrop" />
+          <div className="profile-hero__avatar">
+            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}
           </div>
-        ) : null}
-      </section>
-
-      <section className="hero-card hero-card--compact">
-        <div>
-          <h1>我的{mediumLabels[medium]}</h1>
-          <p className="supporting">聚合你的标记和评分。</p>
+          <button className="profile-hero__settings" type="button" onClick={() => navigate("/settings")}>
+            {hasSession ? "偏好设置" : "请登录"}
+          </button>
+          {hasSession ? (
+            <div className="profile-hero__info">
+              <p className="eyebrow">已登录 / {ipLocation}</p>
+              <h1>{displayName}</h1>
+              <p>ID: {peopleId}</p>
+            </div>
+          ) : (
+            <div className="profile-hero__info">
+              <p className="eyebrow">未登录</p>
+              <h1>连接豆瓣收藏</h1>
+              <p>导入 Cookie 后同步收藏、评分和标记。</p>
+            </div>
+          )}
         </div>
-        <div className="hero-card__stats">
-          <strong>{hasSession ? (total ?? 0) : 0}</strong>
-          <span>条内容</span>
-        </div>
-      </section>
 
-      {hasSession ? (
-        <>
-          <SegmentedControl
-            value={status}
-            options={shelfStatuses.map((item) => ({
-              value: item,
-              label: statusLabels[medium][item]
-            }))}
-            onChange={setStatus}
-          />
+        <div className="profile-content">
+          <section className="hero-card hero-card--compact">
+            <div>
+              <p className="eyebrow">douban-lite</p>
+              <h1>我的{mediumLabels[medium]}</h1>
+              <p className="supporting">集中查看收藏、评分和同步状态，快速回到最近整理的条目。</p>
+            </div>
+            <div className="hero-card__stats">
+              <strong>{hasSession ? (total ?? 0) : 0}</strong>
+              <span>条内容</span>
+            </div>
+          </section>
 
-          <div className="card-grid">
-            {libraryQuery.isFetching ? <p className="empty-state">正在读取本地镜像...</p> : null}
-            {libraryQuery.error ? <p className="form-error">{libraryQuery.error.message}</p> : null}
-            {libraryQuery.data?.items.map((item) => (
-              <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={item.medium} subject={item.subject} item={item} />
+          <section className="stats-grid" aria-label="收藏统计">
+            {mediumTotals.map((item) => (
+              <div className="stat-card" key={item.medium}>
+                <strong>{hasSession ? item.count : 0}</strong>
+                <span>{item.label}</span>
+              </div>
             ))}
-            {libraryQuery.data?.items.length === 0 ? <p className="empty-state">当前分类下还没有同步到内容。</p> : null}
-          </div>
-        </>
-      ) : (
-        <section className="panel login-required-panel">
-          <strong>请先登录豆瓣</strong>
-          <p className="supporting">导入 Cookie 后才能查看你的个人收藏、评分和标记。</p>
-        </section>
-      )}
+          </section>
+
+          {hasSession ? (
+            <>
+              <SegmentedControl
+                value={status}
+                options={shelfStatuses.map((item) => ({
+                  value: item,
+                  label: statusLabels[medium][item]
+                }))}
+                onChange={setStatus}
+              />
+
+              <div className="card-grid">
+                {libraryQuery.isFetching ? <p className="empty-state">正在读取本地镜像...</p> : null}
+                {libraryQuery.error ? <p className="form-error">{libraryQuery.error.message}</p> : null}
+                {libraryQuery.data?.items.map((item) => (
+                  <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={item.medium} subject={item.subject} item={item} />
+                ))}
+                {libraryQuery.data?.items.length === 0 ? <p className="empty-state">当前分类下还没有同步到内容。</p> : null}
+              </div>
+            </>
+          ) : (
+            <section className="panel login-required-panel">
+              <strong>请先登录豆瓣</strong>
+              <p className="supporting">导入 Cookie 后才能查看你的个人收藏、评分和标记。</p>
+              <button className="primary-button" type="button" onClick={() => navigate("/settings")}>去设置</button>
+            </section>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

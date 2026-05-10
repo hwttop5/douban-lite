@@ -26,10 +26,11 @@ export function RankingsPage() {
   });
 
   return (
-    <div className="page">
+    <div className="page rankings-page">
       <section className="page-header">
         <p className="eyebrow">榜单</p>
         <h1>{rankingQuery.data?.board.name ?? activeBoard.name}</h1>
+        <p className="supporting">浏览当前媒介的热门榜单，按排名快速进入条目详情。</p>
         {rankingQuery.data?.stale ? <p className="notice">刷新失败，当前显示最近一次缓存。</p> : null}
       </section>
       {boards.length > 1 ? (

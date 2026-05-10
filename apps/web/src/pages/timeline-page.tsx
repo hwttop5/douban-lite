@@ -54,10 +54,11 @@ export function TimelinePage() {
   });
 
   return (
-    <div className="page">
+    <div className="page timeline-page">
       <section className="page-header">
         <p className="eyebrow">动态</p>
         <h1>豆瓣动态</h1>
+        <p className="supporting">聚合自己和关注的人最近标记。</p>
       </section>
 
       {timelineQuery.data?.stale ? <p className="notice">实时抓取失败，当前显示最近一次缓存。</p> : null}

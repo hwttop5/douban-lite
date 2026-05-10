@@ -1,6 +1,8 @@
 import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { mediumLabels, mediums } from "../../../packages/shared/src";
+import { getDoubanSessionStatus, proxiedImageUrl } from "./api";
 import { AppContextProvider, useAppContext } from "./app-context";
 import { SegmentedControl } from "./components/segmented-control";
 import { MyPage } from "./pages/my-page";
@@ -10,7 +12,9 @@ import { SettingsPage } from "./pages/settings-page";
 import { SubjectDetailPage } from "./pages/subject-detail-page";
 import { TimelinePage } from "./pages/timeline-page";
 
-function NavIcon({ name }: { name: "rankings" | "timeline" | "search" | "me" }) {
+type NavIconName = "rankings" | "timeline" | "search" | "me" | "settings";
+
+function NavIcon({ name }: { name: NavIconName }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
   if (name === "rankings") {
     return <svg {...common}><path d="M4 19V9" /><path d="M12 19V5" /><path d="M20 19v-8" /><path d="M3 19h18" /></svg>;
@@ -21,12 +25,15 @@ function NavIcon({ name }: { name: "rankings" | "timeline" | "search" | "me" }) 
   if (name === "search") {
     return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;
   }
+  if (name === "settings") {
+    return <svg {...common}><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.36.35.7.6 1H20a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-.51 1Z" /></svg>;
+  }
   return <svg {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.8-4 4.5-6 8-6s6.2 2 8 6" /></svg>;
 }
 
-function BottomNavItem({ to, icon, label }: { to: string; icon: "rankings" | "timeline" | "search" | "me"; label: string }) {
+function NavItem({ to, icon, label, variant = "bottom" }: { to: string; icon: NavIconName; label: string; variant?: "bottom" | "sidebar" }) {
   return (
-    <NavLink to={to}>
+    <NavLink to={to} className={variant === "sidebar" ? "sidebar-nav__item" : undefined}>
       <NavIcon name={icon} />
       <span>{label}</span>
     </NavLink>
@@ -37,10 +44,15 @@ function AppNavigation() {
   const { medium, setMedium, showTimelineNav, showRankingsNav } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
+  const sessionQuery = useQuery({
+    queryKey: ["douban-session-status"],
+    queryFn: getDoubanSessionStatus
+  });
   const showMediumPicker =
     !location.pathname.startsWith("/settings") &&
     !location.pathname.startsWith("/timeline") &&
     !location.pathname.startsWith("/subject/");
+  const showBottomNav = !location.pathname.startsWith("/subject/");
 
   useEffect(() => {
     if (!showTimelineNav && location.pathname.startsWith("/timeline")) {
@@ -51,21 +63,50 @@ function AppNavigation() {
     }
   }, [location.pathname, navigate, showRankingsNav, showTimelineNav]);
 
+  const session = sessionQuery.data;
+  const hasDoubanSession = session?.status === "valid";
+  const avatarUrl = hasDoubanSession ? proxiedImageUrl(session.avatarUrl) : null;
+  const accountLabel = hasDoubanSession ? (session.displayName ?? "豆瓣用户") : "未登录";
+  const accountMeta = hasDoubanSession ? `${session.ipLocation ?? "未知地区"} / 已登录 / 同步可用` : "导入 Cookie 后同步收藏";
+  const mediumPicker = showMediumPicker ? (
+    <SegmentedControl
+      value={medium}
+      options={mediums.map((item) => ({
+        value: item,
+        label: mediumLabels[item]
+      }))}
+      onChange={setMedium}
+    />
+  ) : null;
+
   return (
     <div className="app-shell">
-      {showMediumPicker ? (
-        <header className="app-shell__header">
-          <SegmentedControl
-            value={medium}
-            options={mediums.map((item) => ({
-              value: item,
-              label: mediumLabels[item]
-            }))}
-            onChange={setMedium}
-          />
-        </header>
-      ) : null}
+      <aside className="desktop-sidebar" aria-label="主导航">
+        <div className="desktop-sidebar__brand">
+          <p className="eyebrow">douban-lite</p>
+          <strong>私人书影音</strong>
+          <span>只保留真正有用的收藏、搜索和同步。</span>
+        </div>
+        <nav className="sidebar-nav">
+          {showRankingsNav ? <NavItem to="/rankings" icon="rankings" label="榜单" variant="sidebar" /> : null}
+          {showTimelineNav ? <NavItem to="/timeline" icon="timeline" label="动态" variant="sidebar" /> : null}
+          <NavItem to="/search" icon="search" label="搜索" variant="sidebar" />
+          <NavItem to="/me" icon="me" label="我的" variant="sidebar" />
+          <NavItem to="/settings" icon="settings" label="设置" variant="sidebar" />
+        </nav>
+        <button className="desktop-sidebar__account" type="button" onClick={() => navigate("/settings")}>
+          <span className="desktop-sidebar__avatar">
+            {avatarUrl ? <img src={avatarUrl} alt="" /> : accountLabel.slice(0, 1)}
+          </span>
+          <span>
+            <strong>{accountLabel}</strong>
+            <small>{accountMeta}</small>
+          </span>
+        </button>
+      </aside>
+      {showMediumPicker ? <header className="app-shell__header">{mediumPicker}</header> : null}
       <main className="app-shell__main">
+        {showMediumPicker ? <div className="desktop-medium-picker">{mediumPicker}</div> : null}
         <Routes>
           <Route path="/" element={<Navigate to="/me" replace />} />
           <Route path="/timeline" element={<TimelinePage />} />
@@ -76,12 +117,14 @@ function AppNavigation() {
           <Route path="/subject/:medium/:doubanId" element={<SubjectDetailPage />} />
         </Routes>
       </main>
-      <nav className="bottom-nav">
-        {showRankingsNav ? <BottomNavItem to="/rankings" icon="rankings" label="榜单" /> : null}
-        {showTimelineNav ? <BottomNavItem to="/timeline" icon="timeline" label="动态" /> : null}
-        <BottomNavItem to="/search" icon="search" label="搜索" />
-        <BottomNavItem to="/me" icon="me" label="我的" />
-      </nav>
+      {showBottomNav ? (
+        <nav className="bottom-nav">
+          {showRankingsNav ? <NavItem to="/rankings" icon="rankings" label="榜单" /> : null}
+          {showTimelineNav ? <NavItem to="/timeline" icon="timeline" label="动态" /> : null}
+          <NavItem to="/search" icon="search" label="搜索" />
+          <NavItem to="/me" icon="me" label="我的" />
+        </nav>
+      ) : null}
     </div>
   );
 }

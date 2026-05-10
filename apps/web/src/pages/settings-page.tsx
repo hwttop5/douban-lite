@@ -134,10 +134,11 @@ export function SettingsPage() {
   );
 
   return (
-    <div className="page">
+    <div className="page settings-page">
       <section className="page-header">
         <p className="eyebrow">设置</p>
         <h1>偏好设置</h1>
+        <p className="supporting">账号、菜单和同步任务分区管理。</p>
       </section>
 
       {showImport ? (

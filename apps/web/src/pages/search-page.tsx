@@ -17,25 +17,28 @@ export function SearchPage() {
   });
 
   return (
-    <div className="page">
+    <div className="page search-page">
       <section className="page-header">
         <p className="eyebrow">搜索</p>
         <h1>搜索条目</h1>
+        <p className="supporting">按当前媒介搜索豆瓣条目，结果会直接进入详情页。</p>
       </section>
-      <label className="field">
-        <span>关键词</span>
-        <input
-          value={query}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            startTransition(() => {
-              setQuery(nextValue);
-            });
-          }}
-          placeholder="比如：复仇者联盟 / 红楼梦 / Sea Change"
-        />
-      </label>
-      <div className="card-grid">
+      <section className="search-panel">
+        <label className="field">
+          <span>关键词</span>
+          <input
+            value={query}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              startTransition(() => {
+                setQuery(nextValue);
+              });
+            }}
+            placeholder="比如：复仇者联盟 / 红楼梦 / Sea Change"
+          />
+        </label>
+      </section>
+      <div className="card-grid search-results-grid">
         {searchQuery.isFetching ? <p className="empty-state">正在从豆瓣搜索...</p> : null}
         {searchQuery.error ? <p className="form-error">{searchQuery.error.message}</p> : null}
         {searchQuery.data?.items.map((item) => (
