@@ -159,7 +159,6 @@ export function SettingsPage() {
       ) : null}
 
       {sessionPanel}
-      {menuPanel}
 
       <section className="panel">
         <div className="panel__header">
@@ -175,6 +174,8 @@ export function SettingsPage() {
         </div>
         {syncMessage ? <p className={syncMessage.includes("失败") ? "form-error" : "notice"}>{syncMessage}</p> : null}
       </section>
+
+      {menuPanel}
     </div>
   );
 }

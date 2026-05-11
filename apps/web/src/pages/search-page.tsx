@@ -22,7 +22,7 @@ export function SearchPage() {
         <div className="page-header">
           <p className="eyebrow">搜索</p>
           <h1>搜索条目</h1>
-          <p className="supporting">按当前媒介搜索豆瓣条目，结果会直接进入详情页。</p>
+          <p className="supporting">按当前媒介搜索豆瓣条目。</p>
         </div>
         <label className="field">
           <span>关键词</span>

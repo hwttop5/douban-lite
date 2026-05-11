@@ -33,12 +33,6 @@ export function MyPage() {
   const total = totals
     .filter((item) => item.medium === medium)
     .reduce((sum, item) => sum + item.count, 0);
-  const mediumTotals = ["movie", "book", "music", "game"].map((item) => ({
-    medium: item as typeof medium,
-    label: mediumLabels[item as typeof medium],
-    count: totals.filter((totalItem) => totalItem.medium === item).reduce((sum, totalItem) => sum + totalItem.count, 0)
-  }));
-
   return (
     <div className="page my-page">
       <section className="profile-layout">
@@ -81,15 +75,6 @@ export function MyPage() {
                   <strong>{total ?? 0}</strong>
                   <span>条内容</span>
                 </div>
-              </section>
-
-              <section className="stats-grid" aria-label="收藏统计">
-                {mediumTotals.map((item) => (
-                  <div className="stat-card" key={item.medium}>
-                    <strong>{item.count}</strong>
-                    <span>{item.label}</span>
-                  </div>
-                ))}
               </section>
 
               <SegmentedControl
