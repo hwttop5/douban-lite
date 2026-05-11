@@ -50,9 +50,37 @@ describe("End-to-end sync flow", () => {
     expect(detail.body.userItem.status).toBe("done");
     expect(detail.body.userItem.rating).toBe(4);
     expect(detail.body.userItem.syncState).toBe("synced");
+    expect(detail.body.userItem.comment).toBe("");
+    expect(detail.body.userItem.tags).toEqual([]);
+    expect(detail.body.userItem.syncToTimeline).toBe(true);
 
     const remoteState = mock.readState("movie");
     expect(remoteState.status).toBe("done");
     expect(remoteState.rating).toBe(4);
+  });
+
+  it("stores comment, tags, and timeline sync preference through push", async () => {
+    const updateResponse = await agent
+      .post("/api/library/game/30347464/state")
+      .send({ status: "doing", rating: 5, comment: "这次主要看系统设计。", tags: ["冒险", "开放世界"], syncToTimeline: false })
+      .expect(200);
+
+    expect(updateResponse.body.userItem.syncState).toBe("pending_push");
+    expect(updateResponse.body.userItem.comment).toBe("这次主要看系统设计。");
+    expect(updateResponse.body.userItem.tags).toEqual(["冒险", "开放世界"]);
+    expect(updateResponse.body.userItem.syncToTimeline).toBe(false);
+
+    await context.sync.drainQueue();
+
+    const detail = await agent.get("/api/subjects/game/30347464").expect(200);
+    expect(detail.body.userItem.comment).toBe("这次主要看系统设计。");
+    expect(detail.body.userItem.tags).toEqual(["冒险", "开放世界"]);
+    expect(detail.body.userItem.syncToTimeline).toBe(false);
+    expect(detail.body.userItem.syncState).toBe("synced");
+
+    const remoteState = mock.readState("game");
+    expect(remoteState.comment).toBe("这次主要看系统设计。");
+    expect(remoteState.tags).toEqual(["冒险", "开放世界"]);
+    expect(remoteState.syncToTimeline).toBe(false);
   });
 });

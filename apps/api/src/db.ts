@@ -65,6 +65,9 @@ function mapUserItem(row: Row, prefix = ""): UserItemRecord {
     doubanId: String(row[`${prefix}douban_id`]),
     status: row[`${prefix}status`] as ShelfStatus,
     rating: row[`${prefix}rating`] == null ? null : Number(row[`${prefix}rating`]),
+    comment: (row[`${prefix}comment`] as string | null) ?? null,
+    tags: parseJson<string[]>(row[`${prefix}tags_json`], []),
+    syncToTimeline: row[`${prefix}sync_to_timeline`] == null ? true : Boolean(Number(row[`${prefix}sync_to_timeline`])),
     syncState: row[`${prefix}sync_state`] as UserItemRecord["syncState"],
     errorMessage: (row[`${prefix}error_message`] as string | null) ?? null,
     updatedAt: String(row[`${prefix}updated_at`]),
@@ -120,6 +123,9 @@ export class AppDatabase {
         douban_id TEXT NOT NULL,
         status TEXT NOT NULL,
         rating INTEGER,
+        comment TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        sync_to_timeline INTEGER NOT NULL DEFAULT 1,
         sync_state TEXT NOT NULL,
         error_message TEXT,
         updated_at TEXT NOT NULL,
@@ -176,6 +182,9 @@ export class AppDatabase {
     this.ensureColumn("douban_session", "display_name", "TEXT");
     this.ensureColumn("douban_session", "avatar_url", "TEXT");
     this.ensureColumn("douban_session", "ip_location", "TEXT");
+    this.ensureColumn("user_items", "comment", "TEXT");
+    this.ensureColumn("user_items", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureColumn("user_items", "sync_to_timeline", "INTEGER NOT NULL DEFAULT 1");
   }
 
   private ensureColumn(table: string, column: string, definition: string) {
@@ -268,6 +277,9 @@ export class AppDatabase {
     doubanId: string;
     status: ShelfStatus;
     rating: number | null;
+    comment?: string | null;
+    tags?: string[];
+    syncToTimeline?: boolean;
     syncState: UserItemRecord["syncState"];
     errorMessage?: string | null;
     updatedAt?: string;
@@ -275,15 +287,23 @@ export class AppDatabase {
     lastPushedAt?: string | null;
   }) {
     const updatedAt = item.updatedAt ?? nowIso();
+    const tagsJson = item.tags === undefined ? null : JSON.stringify(item.tags);
+    const syncToTimeline = item.syncToTimeline === undefined ? null : item.syncToTimeline ? 1 : 0;
+    const hasComment = item.comment !== undefined ? 1 : 0;
+    const hasTags = item.tags !== undefined ? 1 : 0;
+    const hasSyncToTimeline = item.syncToTimeline !== undefined ? 1 : 0;
     this.db
       .prepare(`
         INSERT INTO user_items (
-          medium, douban_id, status, rating, sync_state, error_message,
+          medium, douban_id, status, rating, comment, tags_json, sync_to_timeline, sync_state, error_message,
           updated_at, last_synced_at, last_pushed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, COALESCE(?, '[]'), COALESCE(?, 1), ?, ?, ?, ?, ?)
         ON CONFLICT(medium, douban_id) DO UPDATE SET
           status = excluded.status,
           rating = excluded.rating,
+          comment = CASE WHEN ? THEN excluded.comment ELSE user_items.comment END,
+          tags_json = CASE WHEN ? THEN excluded.tags_json ELSE user_items.tags_json END,
+          sync_to_timeline = CASE WHEN ? THEN excluded.sync_to_timeline ELSE user_items.sync_to_timeline END,
           sync_state = excluded.sync_state,
           error_message = excluded.error_message,
           updated_at = excluded.updated_at,
@@ -295,11 +315,17 @@ export class AppDatabase {
         item.doubanId,
         item.status,
         item.rating,
+        item.comment ?? null,
+        tagsJson,
+        syncToTimeline,
         item.syncState,
         item.errorMessage ?? null,
         updatedAt,
         item.lastSyncedAt ?? null,
-        item.lastPushedAt ?? null
+        item.lastPushedAt ?? null,
+        hasComment,
+        hasTags,
+        hasSyncToTimeline
       );
   }
 
@@ -329,6 +355,9 @@ export class AppDatabase {
           u.douban_id AS user_douban_id,
           u.status AS user_status,
           u.rating AS user_rating,
+          u.comment AS user_comment,
+          u.tags_json AS user_tags_json,
+          u.sync_to_timeline AS user_sync_to_timeline,
           u.sync_state AS user_sync_state,
           u.error_message AS user_error_message,
           u.updated_at AS user_updated_at,
@@ -385,6 +414,9 @@ export class AppDatabase {
           u.douban_id AS user_douban_id,
           u.status AS user_status,
           u.rating AS user_rating,
+          u.comment AS user_comment,
+          u.tags_json AS user_tags_json,
+          u.sync_to_timeline AS user_sync_to_timeline,
           u.sync_state AS user_sync_state,
           u.error_message AS user_error_message,
           u.updated_at AS user_updated_at,

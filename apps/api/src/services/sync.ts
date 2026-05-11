@@ -10,7 +10,8 @@ import type {
   SyncJobRecord,
   SyncJobType,
   TimelineResponse,
-  TimelineScope
+  TimelineScope,
+  UpdateLibraryStateInput
 } from "../../../../packages/shared/src";
 import { boardCatalog, mediums, shelfStatuses } from "../../../../packages/shared/src";
 import type { AppConfig } from "../config";
@@ -266,14 +267,17 @@ export class SyncService {
     return this.enqueueJob("manual_pull");
   }
 
-  async updateLibraryState(medium: Medium, doubanId: string, nextState: { status: ShelfStatus; rating: number | null }) {
+  async updateLibraryState(medium: Medium, doubanId: string, nextState: UpdateLibraryStateInput) {
     this.requireSession();
     const detail = await this.getSubjectDetail(medium, doubanId);
     this.db.upsertUserItem({
       medium,
       doubanId,
       status: nextState.status,
-      rating: nextState.rating,
+      rating: nextState.rating ?? null,
+      comment: nextState.comment ?? "",
+      tags: nextState.tags ?? [],
+      syncToTimeline: nextState.syncToTimeline ?? true,
       syncState: "pending_push",
       errorMessage: null,
       updatedAt: nowIso()
@@ -410,7 +414,10 @@ export class SyncService {
     try {
       const result = await this.client.pushState(medium, doubanId, session.cookie, {
         status: current.status,
-        rating: current.rating
+        rating: current.rating,
+        comment: current.comment,
+        tags: current.tags,
+        syncToTimeline: current.syncToTimeline
       });
       this.db.saveDoubanSession({
         cookie: session.cookie,
@@ -425,6 +432,9 @@ export class SyncService {
         doubanId,
         status: current.status,
         rating: current.rating,
+        comment: current.comment,
+        tags: current.tags,
+        syncToTimeline: current.syncToTimeline,
         syncState: "synced",
         errorMessage: null,
         updatedAt: nowIso(),
@@ -440,6 +450,9 @@ export class SyncService {
         doubanId,
         status: current.status,
         rating: current.rating,
+        comment: current.comment,
+        tags: current.tags,
+        syncToTimeline: current.syncToTimeline,
         syncState: "needs_attention",
         errorMessage: error instanceof Error ? error.message : "Push failed",
         updatedAt: nowIso(),

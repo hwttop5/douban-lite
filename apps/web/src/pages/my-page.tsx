@@ -42,14 +42,16 @@ export function MyPage() {
             {hasSession ? "偏好设置" : "请登录"}
           </button>
           {hasSession ? (
-            <div className="profile-hero__identity">
-              <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}</div>
-              <div className="profile-hero__info">
-                <h1>{displayName}</h1>
-                <p className="eyebrow">已登录 / {ipLocation}</p>
-                <p>ID: {peopleId}</p>
+            <>
+              <div className="profile-hero__identity">
+                <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span />}</div>
+                <div className="profile-hero__info">
+                  <h1>{displayName}</h1>
+                </div>
               </div>
-            </div>
+              <p className="profile-hero__id">ID: {peopleId}</p>
+              <p className="profile-hero__session">已登录 / {ipLocation}</p>
+            </>
           ) : (
             <>
               <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span>?</span>}</div>
@@ -69,7 +71,7 @@ export function MyPage() {
                 <div>
                   <p className="eyebrow">douban-lite</p>
                   <h1>我的{mediumLabels[medium]}</h1>
-                  <p className="supporting">集中查看收藏、评分和同步状态，快速回到最近整理的条目。</p>
+                  <p className="supporting">集中查看收藏、评分和同步状态。</p>
                 </div>
                 <div className="hero-card__stats">
                   <strong>{total ?? 0}</strong>

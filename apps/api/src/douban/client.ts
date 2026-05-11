@@ -16,6 +16,14 @@ import {
   parseUserCollection
 } from "./parsers";
 
+interface PushStateInput {
+  status: ShelfStatus;
+  rating: number | null;
+  comment?: string | null;
+  tags?: string[];
+  syncToTimeline?: boolean;
+}
+
 export class DoubanClient {
   constructor(private readonly config: Pick<AppConfig, "doubanPublicBaseUrl" | "doubanWebBaseUrl">) {}
 
@@ -64,6 +72,29 @@ export class DoubanClient {
         return "do";
       case "done":
         return "collect";
+    }
+  }
+
+  private applyInterestExtras(body: URLSearchParams, nextState: PushStateInput) {
+    const comment = nextState.comment?.trim() ?? "";
+    const tags = nextState.tags?.map((tag) => tag.trim()).filter(Boolean).join(" ") ?? "";
+    const syncValue = nextState.syncToTimeline === false ? "0" : "1";
+
+    const setFirstMatching = (patterns: RegExp[], fallback: string, value: string) => {
+      const key = Array.from(body.keys()).find((name) => patterns.some((pattern) => pattern.test(name)));
+      body.set(key ?? fallback, value);
+    };
+
+    setFirstMatching([/^comment$/i, /comment/i, /intro/i], "comment", comment);
+    setFirstMatching([/^tags$/i, /tag/i], "tags", tags);
+
+    for (const key of ["sync_douban", "sync_to_douban", "sync_to_timeline", "sync"]) {
+      if (body.has(key)) {
+        body.set(key, syncValue);
+      }
+    }
+    if (!body.has("sync_douban")) {
+      body.set("sync_douban", syncValue);
     }
   }
 
@@ -299,7 +330,7 @@ export class DoubanClient {
     medium: Medium,
     doubanId: string,
     cookie: string,
-    nextState: { status: ShelfStatus; rating: number | null }
+    nextState: PushStateInput
   ) {
     const detailUrl = this.authSubjectUrl(medium, doubanId);
     const interestUrl = `${this.authBaseUrl(medium)}/j/subject/${doubanId}/interest`;
@@ -317,8 +348,10 @@ export class DoubanClient {
         interest: this.toDoubanStatus(nextState.status),
         rating: nextState.rating == null ? "" : String(nextState.rating),
         tags: "",
-        comment: ""
+        comment: "",
+        sync_douban: nextState.syncToTimeline === false ? "0" : "1"
       });
+      this.applyInterestExtras(body, nextState);
       if (authToken) {
         body.set("ck", authToken);
       }
@@ -385,6 +418,7 @@ export class DoubanClient {
     if (form.ratingFieldName) {
       body.set(form.ratingFieldName, nextState.rating == null ? "" : String(nextState.rating));
     }
+    this.applyInterestExtras(body, nextState);
     if (authToken && !body.has("ck")) {
       body.set("ck", authToken);
     }

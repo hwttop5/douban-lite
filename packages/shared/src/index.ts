@@ -67,6 +67,9 @@ export interface UserItemRecord {
   doubanId: string;
   status: ShelfStatus;
   rating: number | null;
+  comment: string | null;
+  tags: string[];
+  syncToTimeline: boolean;
   syncState: SyncState;
   errorMessage: string | null;
   updatedAt: string;
@@ -200,7 +203,6 @@ export interface TimelineResponse {
 
 export const boardCatalog: Record<Medium, RankingBoardConfig[]> = {
   movie: [
-    { key: "showing", name: "正在热映", path: "https://movie.douban.com/cinema/nowplaying/beijing/", sourceType: "movie_showing" },
     { key: "hot-movies", name: "热门电影", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门" },
     { key: "hot-tv", name: "热门电视剧", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门电视剧" },
     { key: "top250", name: "TOP250", path: "https://movie.douban.com/top250", sourceType: "html_list" }
@@ -232,8 +234,13 @@ export const importDoubanSessionSchema = z.object({
 
 export const updateLibraryStateSchema = z.object({
   status: shelfStatusSchema,
-  rating: z.number().int().min(1).max(5).nullable().optional()
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  comment: z.string().trim().max(140).optional(),
+  tags: z.array(z.string().trim().min(1).max(20)).max(12).optional(),
+  syncToTimeline: z.boolean().optional()
 });
+
+export type UpdateLibraryStateInput = z.infer<typeof updateLibraryStateSchema>;
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

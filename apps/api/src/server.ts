@@ -218,7 +218,10 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       response.json(
         await sync.updateLibraryState(medium.data, request.params.doubanId, {
           status: body.data.status,
-          rating: body.data.rating ?? null
+          rating: body.data.rating ?? null,
+          comment: body.data.comment ?? "",
+          tags: body.data.tags ?? [],
+          syncToTimeline: body.data.syncToTimeline ?? true
         })
       );
     } catch (error) {

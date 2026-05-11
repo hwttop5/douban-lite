@@ -70,7 +70,7 @@ describe("API integration", () => {
     expect(detail.body.subject.title).toBe("肖申克的救赎");
     expect(detail.body.comments[0].content).toBe("这是一条公开短评。");
 
-    const ranking = await agent.get("/api/rankings?medium=movie&board=showing").expect(200);
+    const ranking = await agent.get("/api/rankings?medium=movie&board=hot-movies").expect(200);
     expect(ranking.body.items[0].subject.title).toBe("肖申克的救赎");
   });
 

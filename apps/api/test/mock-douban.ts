@@ -3,6 +3,14 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { Medium, ShelfStatus } from "../../../packages/shared/src";
 
+interface MockRemoteState {
+  status: ShelfStatus;
+  rating: number | null;
+  comment: string;
+  tags: string[];
+  syncToTimeline: boolean;
+}
+
 interface MockSubject {
   medium: Medium;
   doubanId: string;
@@ -88,7 +96,7 @@ function interestValue(status: ShelfStatus) {
   }
 }
 
-function renderDetail(subject: MockSubject, state: { status: ShelfStatus; rating: number | null }) {
+function renderDetail(subject: MockSubject, state: MockRemoteState) {
   const canonical =
     subject.medium === "game"
       ? `https://example.test/game/${subject.doubanId}/`
@@ -119,6 +127,9 @@ function renderDetail(subject: MockSubject, state: { status: ShelfStatus; rating
         <input type="hidden" name="ck" value="test-ck" />
         <input type="hidden" name="interest" value="${interestValue(state.status)}" />
         <select name="rating"><option value="${state.rating ?? ""}" selected>${state.rating ?? ""}</option></select>
+        <input type="text" name="tags" value="${state.tags.join(" ")}" />
+        <textarea name="comment">${state.comment}</textarea>
+        <input type="checkbox" name="sync_douban" value="1" ${state.syncToTimeline ? "checked" : ""} />
       </form>
     </body>
   </html>`;
@@ -156,7 +167,7 @@ function renderSearch(subject: MockSubject) {
   </body></html>`;
 }
 
-function renderLibrary(subject: MockSubject, status: ShelfStatus, state: { status: ShelfStatus; rating: number | null }) {
+function renderLibrary(subject: MockSubject, status: ShelfStatus, state: MockRemoteState) {
   if (state.status !== status) {
     return "<html><body></body></html>";
   }
@@ -173,7 +184,7 @@ function renderLibrary(subject: MockSubject, status: ShelfStatus, state: { statu
   </body></html>`;
 }
 
-function renderGameLibrary(subject: MockSubject, status: ShelfStatus, state: { status: ShelfStatus; rating: number | null }) {
+function renderGameLibrary(subject: MockSubject, status: ShelfStatus, state: MockRemoteState) {
   if (state.status !== status) {
     return "<html><body></body></html>";
   }
@@ -224,9 +235,15 @@ export async function createMockDoubanServer() {
   const app = express();
   app.use(express.urlencoded({ extended: false }));
 
-  const states = new Map<string, { status: ShelfStatus; rating: number | null }>();
+  const states = new Map<string, MockRemoteState>();
   (Object.values(subjects) as MockSubject[]).forEach((subject) => {
-    states.set(`${subject.medium}:${subject.doubanId}`, { status: "wish", rating: 5 });
+    states.set(`${subject.medium}:${subject.doubanId}`, {
+      status: "wish",
+      rating: 5,
+      comment: "",
+      tags: [],
+      syncToTimeline: true
+    });
   });
 
   app.get("/", (_request, response) => {
@@ -304,7 +321,13 @@ export async function createMockDoubanServer() {
     const subject = subjects[medium];
     states.set(`${medium}:${subject.doubanId}`, {
       status: request.body.interest === "collect" ? "done" : request.body.interest === "do" ? "doing" : "wish",
-      rating: request.body.rating ? Number(request.body.rating) : null
+      rating: request.body.rating ? Number(request.body.rating) : null,
+      comment: String(request.body.comment ?? ""),
+      tags: String(request.body.tags ?? "")
+        .split(/\s+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      syncToTimeline: String(request.body.sync_douban ?? "1") !== "0"
     });
     response.send(renderDetail(subject, states.get(`${medium}:${subject.doubanId}`)!));
   });
@@ -313,7 +336,13 @@ export async function createMockDoubanServer() {
     const subject = subjects.game;
     states.set(`game:${subject.doubanId}`, {
       status: request.body.interest === "collect" ? "done" : request.body.interest === "do" ? "doing" : "wish",
-      rating: request.body.rating ? Number(request.body.rating) : null
+      rating: request.body.rating ? Number(request.body.rating) : null,
+      comment: String(request.body.comment ?? ""),
+      tags: String(request.body.tags ?? "")
+        .split(/\s+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      syncToTimeline: String(request.body.sync_douban ?? "1") !== "0"
     });
     response.send(renderDetail(subject, states.get(`game:${subject.doubanId}`)!));
   });

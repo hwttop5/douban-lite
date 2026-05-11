@@ -11,7 +11,8 @@ import type {
   SyncEventRecord,
   SyncJobRecord,
   TimelineResponse,
-  TimelineScope
+  TimelineScope,
+  UpdateLibraryStateInput
 } from "../../../packages/shared/src";
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -106,7 +107,7 @@ export function getTimeline(scope: TimelineScope) {
   return request<TimelineResponse>(`/api/timeline?${params.toString()}`);
 }
 
-export function updateLibraryState(medium: Medium, doubanId: string, input: { status: ShelfStatus; rating: number | null }) {
+export function updateLibraryState(medium: Medium, doubanId: string, input: UpdateLibraryStateInput) {
   return request<{ job: SyncJobRecord; userItem: SubjectDetailResponse["userItem"] }>(`/api/library/${medium}/${doubanId}/state`, {
     method: "POST",
     body: JSON.stringify(input)

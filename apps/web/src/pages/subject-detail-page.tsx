@@ -1,9 +1,19 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import type { ShelfStatus, SubjectComment } from "../../../../packages/shared/src";
+import type { ShelfStatus, SubjectComment, UpdateLibraryStateInput } from "../../../../packages/shared/src";
 import { mediumLabels, mediumSchema, statusLabels } from "../../../../packages/shared/src";
 import { getDoubanSessionStatus, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
+
+const tagSuggestions = ["温情", "治愈", "经典", "想再看", "剧情", "家庭", "冒险", "音乐", "文学", "独立", "动作", "怀旧"];
+
+interface MarkDialogState {
+  status: ShelfStatus;
+  rating: number | null;
+  comment: string;
+  tags: string[];
+  syncToTimeline: boolean;
+}
 
 function ratingLabelToScore(label: string | null) {
   if (!label) {
@@ -43,6 +53,7 @@ export function SubjectDetailPage() {
   const navigate = useNavigate();
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const [markDialog, setMarkDialog] = useState<MarkDialogState | null>(null);
   const medium = mediumSchema.parse(params.medium);
   const doubanId = params.doubanId!;
   const from = typeof location.state === "object" && location.state && "from" in location.state ? location.state.from : null;
@@ -88,8 +99,9 @@ export function SubjectDetailPage() {
   });
 
   const mutation = useMutation({
-    mutationFn: (input: { status: "wish" | "doing" | "done"; rating: number | null }) => updateLibraryState(medium, doubanId, input),
+    mutationFn: (input: UpdateLibraryStateInput) => updateLibraryState(medium, doubanId, input),
     onSuccess: async () => {
+      setMarkDialog(null);
       await queryClient.invalidateQueries({ queryKey: ["subject", medium, doubanId] });
       await queryClient.invalidateQueries({ queryKey: ["library", medium] });
       await queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -109,13 +121,43 @@ export function SubjectDetailPage() {
   const visibleUserItem = hasDoubanSession ? userItem : null;
   const currentStatus = visibleUserItem?.status ?? "wish";
   const currentRating = visibleUserItem?.rating ?? null;
-  const requireLoginThenMutate = (input: { status: ShelfStatus; rating: number | null }) => {
+  const openMarkDialog = (input: { status: ShelfStatus; rating: number | null }) => {
     if (!hasDoubanSession) {
       setLoginMessage("请先登录豆瓣后再标记和评分。");
       return;
     }
     setLoginMessage(null);
-    mutation.mutate(input);
+    setMarkDialog({
+      status: input.status,
+      rating: input.rating,
+      comment: visibleUserItem?.comment ?? "",
+      tags: visibleUserItem?.tags ?? [],
+      syncToTimeline: visibleUserItem?.syncToTimeline ?? true
+    });
+  };
+  const updateMarkDialog = (partial: Partial<MarkDialogState>) => {
+    setMarkDialog((current) => (current ? { ...current, ...partial } : current));
+  };
+  const toggleTag = (tag: string) => {
+    setMarkDialog((current) => {
+      if (!current) {
+        return current;
+      }
+      const tags = current.tags.includes(tag) ? current.tags.filter((item) => item !== tag) : [...current.tags, tag].slice(0, 6);
+      return { ...current, tags };
+    });
+  };
+  const submitMarkDialog = () => {
+    if (!markDialog) {
+      return;
+    }
+    mutation.mutate({
+      status: markDialog.status,
+      rating: markDialog.rating,
+      comment: markDialog.comment.trim(),
+      tags: markDialog.tags,
+      syncToTimeline: markDialog.syncToTimeline
+    });
   };
   const handleShare = async () => {
     if (!subject) {
@@ -201,7 +243,7 @@ export function SubjectDetailPage() {
               key={value}
               disabled={mutation.isPending || sessionPending}
               className={`${value === currentStatus && visibleUserItem ? "detail-action is-active" : "detail-action"}${!hasDoubanSession && !sessionPending ? " is-disabled" : ""}`}
-              onClick={() => requireLoginThenMutate({ status: value, rating: currentRating })}
+              onClick={() => openMarkDialog({ status: value, rating: currentRating })}
             >
               <span>{value === "wish" ? "⊕" : value === "doing" ? "⊙" : "☆"}</span>
               {label}
@@ -220,28 +262,23 @@ export function SubjectDetailPage() {
             </div>
             <p>{subject.averageRating ? "来自豆瓣公开评分" : "暂无公开评分"}</p>
           </div>
-          {currentRating != null ? (
-            <div className="detail-my-rating">
-              <span>我的评分</span>
-              <div className="detail-my-rating__stars" aria-label="我的评分">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    type="button"
-                    key={value}
-                    disabled={mutation.isPending || sessionPending}
-                    className={value <= currentRating ? "is-active" : ""}
-                    onClick={() => requireLoginThenMutate({ status: currentStatus, rating: value })}
-                    aria-label={`${value} 星`}
-                  >
-                    ★
-                  </button>
-                ))}
-              </div>
-              <button type="button" disabled={mutation.isPending || sessionPending} onClick={() => requireLoginThenMutate({ status: currentStatus, rating: null })}>
-                清空
-              </button>
+          <div className="detail-my-rating">
+            <span>我的评分</span>
+            <div className="detail-my-rating__stars" aria-label="我的评分">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  disabled={mutation.isPending || sessionPending}
+                  className={currentRating != null && value <= currentRating ? "is-active" : ""}
+                  onClick={() => openMarkDialog({ status: currentStatus, rating: value })}
+                  aria-label={`${value} 星`}
+                >
+                  ★
+                </button>
+              ))}
             </div>
-          ) : null}
+          </div>
         </div>
         <p className="detail-current-state">
           当前：{visibleUserItem ? statusLabels[medium][visibleUserItem.status] : "未标记"}
@@ -305,6 +342,86 @@ export function SubjectDetailPage() {
           <p className="empty-state">没有更多短评了。</p>
         ) : null}
       </section>
+      {markDialog ? (
+        <div className="mark-dialog" role="dialog" aria-modal="true" aria-labelledby="mark-dialog-title">
+          <div className="mark-dialog__scrim" onClick={() => (mutation.isPending ? null : setMarkDialog(null))} />
+          <section className="mark-dialog__panel">
+            <header className="mark-dialog__header">
+              <button type="button" onClick={() => setMarkDialog(null)} disabled={mutation.isPending}>
+                取消
+              </button>
+              <h2 id="mark-dialog-title">{subject.title}</h2>
+              <button type="button" onClick={submitMarkDialog} disabled={mutation.isPending}>
+                {mutation.isPending ? "保存中" : "确定"}
+              </button>
+            </header>
+
+            <div className="mark-dialog__body">
+              <div className="mark-dialog__status" aria-label="标记状态">
+                {(Object.entries(statusLabels[medium]) as Array<[ShelfStatus, string]>).map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    className={markDialog.status === value ? "status-pill is-active" : "status-pill"}
+                    onClick={() => updateMarkDialog({ status: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mark-dialog__rating">
+                <span>评分</span>
+                <div className="rating-row">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={markDialog.rating != null && value <= markDialog.rating ? "rating-star is-active" : "rating-star"}
+                      onClick={() => updateMarkDialog({ rating: value })}
+                      aria-label={`${value} 星`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mark-dialog__tags">
+                <span>打标签</span>
+                <div>
+                  {tagSuggestions.map((tag) => (
+                    <button type="button" key={tag} className={markDialog.tags.includes(tag) ? "tag-choice is-active" : "tag-choice"} onClick={() => toggleTag(tag)}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="mark-dialog__comment">
+                <span>
+                  写短评
+                  <small>{140 - markDialog.comment.length}</small>
+                </span>
+                <textarea
+                  value={markDialog.comment}
+                  maxLength={140}
+                  rows={5}
+                  placeholder="写几句自己的感受..."
+                  onChange={(event) => updateMarkDialog({ comment: event.target.value.slice(0, 140) })}
+                />
+              </label>
+
+              <label className="mark-dialog__sync">
+                <input type="checkbox" checked={markDialog.syncToTimeline} onChange={(event) => updateMarkDialog({ syncToTimeline: event.target.checked })} />
+                <span>同步到豆瓣</span>
+              </label>
+
+              {mutation.error ? <p className="form-error">{mutation.error.message}</p> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
