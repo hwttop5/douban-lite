@@ -12,6 +12,7 @@ import {
   parseSearchResults,
   parseSubjectComments,
   parseSubjectDetail,
+  parseSubjectDetailExtras,
   parseTimeline,
   parseUserCollection
 } from "./parsers";
@@ -27,6 +28,7 @@ interface PushStateInput {
 export class DoubanClient {
   constructor(private readonly config: Pick<AppConfig, "doubanPublicBaseUrl" | "doubanWebBaseUrl">) {}
 
+  private readonly timelinePageSize = 20;
   private readonly userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -175,6 +177,26 @@ export class DoubanClient {
     return JSON.parse(text) as T;
   }
 
+  private async readInterestSelection(medium: Medium, doubanId: string, detailUrl: string, cookie: string, fallbackHtml: string) {
+    if (medium === "game") {
+      return parseInterestSelection(fallbackHtml, detailUrl);
+    }
+
+    const interestUrl = `${this.authBaseUrl(medium)}/j/subject/${doubanId}/interest`;
+    try {
+      const editor = await this.requestJson<{ html: string }>(interestUrl, {
+        headers: {
+          cookie,
+          referer: detailUrl,
+          "x-requested-with": "XMLHttpRequest"
+        }
+      });
+      return parseInterestSelection(editor.html, interestUrl);
+    } catch {
+      return parseInterestSelection(fallbackHtml, detailUrl);
+    }
+  }
+
   async validateSession(cookie: string, peopleId?: string | null) {
     const target = peopleId
       ? `${this.config.doubanWebBaseUrl}/people/${peopleId}/`
@@ -204,10 +226,13 @@ export class DoubanClient {
 
   async getSubjectDetail(medium: Medium, doubanId: string, cookie?: string) {
     const url = cookie ? this.authSubjectUrl(medium, doubanId) : this.publicSubjectUrl(medium, doubanId);
-    const { text } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
+    const { text, url: finalUrl } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
+    const subject = parseSubjectDetail(text, url, medium);
     return {
-      subject: parseSubjectDetail(text, url, medium),
-      comments: parseSubjectComments(text)
+      subject,
+      comments: parseSubjectComments(text),
+      extras: parseSubjectDetailExtras(text, url, medium, subject.doubanId),
+      userSelection: cookie ? await this.readInterestSelection(medium, doubanId, finalUrl, cookie, text) : null
     };
   }
 
@@ -237,12 +262,6 @@ export class DoubanClient {
   }
 
   async getRanking(medium: Medium, board: RankingBoardConfig, cookie?: string) {
-    if (this.usesCustomWebBase()) {
-      const url = `${this.config.doubanPublicBaseUrl}/${medium}/board/${board.key}`;
-      const { text } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
-      return parseRanking(text, url, medium, board);
-    }
-
     if (board.sourceType === "movie_hot") {
       const params = new URLSearchParams({
         type: board.key === "hot-tv" ? "tv" : "movie",
@@ -268,10 +287,11 @@ export class DoubanClient {
         ? board.path
         : `${this.config.doubanPublicBaseUrl}${board.path}`;
 
-    if (board.sourceType === "doulist") {
+    if (board.sourceType === "doulist" || (board.sourceType === "html_list" && (board.maxPages ?? 1) > 1)) {
       const allItems: RankingItem[] = [];
       const seen = new Set<string>();
       const maxPages = board.maxPages ?? 1;
+      const limit = board.sourceType === "doulist" ? 500 : maxPages * 25;
       for (let page = 0; page < maxPages; page += 1) {
         const pageUrl = `${url}${url.includes("?") ? "&" : "?"}start=${page * 25}`;
         const { text, url: finalUrl } = await this.request(pageUrl, cookie ? { headers: { cookie } } : undefined);
@@ -288,18 +308,18 @@ export class DoubanClient {
           break;
         }
       }
-      return allItems.map((item, index) => ({ ...item, rank: index + 1 })).slice(0, 500);
+      return allItems.map((item, index) => ({ ...item, rank: index + 1 })).slice(0, limit);
     }
 
     const { text } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
     return parseRanking(text, url, medium, board);
   }
 
-  async getTimeline(scope: TimelineScope, cookie: string, peopleId?: string | null) {
+  async getTimeline(scope: TimelineScope, cookie: string, peopleId?: string | null, start = 0) {
     const url =
       scope === "following"
-        ? `${this.config.doubanWebBaseUrl}/`
-        : `${this.config.doubanWebBaseUrl}/people/${peopleId ?? ""}/statuses`;
+        ? `${this.config.doubanWebBaseUrl}/?start=${start}`
+        : `${this.config.doubanWebBaseUrl}/people/${peopleId ?? ""}/statuses?start=${start}`;
     if (scope === "mine" && !peopleId) {
       throw new Error("peopleId is required for mine timeline.");
     }
@@ -308,7 +328,13 @@ export class DoubanClient {
         cookie
       }
     });
-    return parseTimeline(text, finalUrl);
+    const items = parseTimeline(text, finalUrl);
+    return {
+      start,
+      items,
+      nextStart: items.length > 0 ? start + items.length : null,
+      hasMore: items.length >= this.timelinePageSize
+    };
   }
 
   async getUserCollection(medium: Medium, status: ShelfStatus, page: number, cookie: string, peopleId: string) {

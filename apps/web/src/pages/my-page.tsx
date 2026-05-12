@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import type { ShelfStatus } from "../../../../packages/shared/src";
 import { mediumLabels, shelfStatuses, statusLabels } from "../../../../packages/shared/src";
-import { getLibrary, getOverview, proxiedImageUrl } from "../api";
+import { getAuthMe, getLibrary, getOverview, proxiedImageUrl } from "../api";
 import { useAppContext } from "../app-context";
+import { LoadingInline, PanelLoading, SubjectCardSkeletonGrid } from "../components/loading-state";
 import { SegmentedControl } from "../components/segmented-control";
 import { SubjectCard } from "../components/subject-card";
 
@@ -13,26 +14,52 @@ export function MyPage() {
   const { medium } = useAppContext();
   const [status, setStatus] = useState<ShelfStatus>("wish");
 
+  const authQuery = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: getAuthMe,
+    retry: false
+  });
+  const session = authQuery.data?.sessionStatus;
+  const user = authQuery.data?.user;
+  const hasSession = authQuery.data?.authenticated && session?.status === "valid";
   const overviewQuery = useQuery({
     queryKey: ["overview"],
-    queryFn: getOverview
+    queryFn: getOverview,
+    enabled: Boolean(hasSession),
+    retry: false
   });
-  const session = overviewQuery.data?.sessionStatus;
-  const hasSession = session?.status === "valid";
   const libraryQuery = useQuery({
     queryKey: ["library", medium, status],
     queryFn: () => getLibrary(medium, status),
-    enabled: hasSession
+    enabled: Boolean(hasSession)
   });
 
-  const displayName = session?.displayName ?? "已登录";
-  const peopleId = session?.peopleId ?? "未获取";
-  const ipLocation = session?.ipLocation ?? "未获取";
-  const avatarUrl = hasSession ? proxiedImageUrl(session.avatarUrl) : null;
+  const displayName = user?.displayName ?? session?.displayName ?? "已登录";
+  const peopleId = user?.peopleId ?? session?.peopleId ?? "未获取";
+  const ipLocation = user?.ipLocation ?? session?.ipLocation ?? "未获取";
+  const avatarUrl = hasSession ? proxiedImageUrl(user?.avatarUrl ?? session?.avatarUrl) : null;
   const totals = overviewQuery.data?.totals ?? [];
   const total = totals
     .filter((item) => item.medium === medium)
     .reduce((sum, item) => sum + item.count, 0);
+  const showLibrarySkeleton = hasSession && libraryQuery.isFetching && !libraryQuery.data;
+  const showLibraryRefreshHint = hasSession && libraryQuery.isFetching && Boolean(libraryQuery.data);
+
+  if ((authQuery.isPending && !authQuery.data) || (hasSession && overviewQuery.isPending && !overviewQuery.data)) {
+    return (
+      <div className="page my-page">
+        <section className="profile-layout">
+          <PanelLoading title="正在整理资料" detail="登录状态、统计和个人书影音会一起准备好。" />
+          <section className="panel panel--loading">
+            <div className="card-grid">
+              <SubjectCardSkeletonGrid count={4} />
+            </div>
+          </section>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page my-page">
       <section className="profile-layout">
@@ -57,8 +84,8 @@ export function MyPage() {
               <div className="profile-hero__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : <span>?</span>}</div>
               <div className="profile-hero__info">
                 <p className="eyebrow">未登录</p>
-                <h1>连接豆瓣收藏</h1>
-                <p>导入 Cookie 后同步收藏、评分和标记。</p>
+                <h1>连接豆瓣</h1>
+                <p>导入 Cookie 后同步评分和标记。</p>
               </div>
             </>
           )}
@@ -89,18 +116,19 @@ export function MyPage() {
               />
 
               <div className="card-grid">
-                {libraryQuery.isFetching ? <p className="empty-state">正在读取本地镜像...</p> : null}
+                {showLibraryRefreshHint ? <p className="loading-row"><LoadingInline label="正在刷新本地镜像" tone="soft" /></p> : null}
                 {libraryQuery.error ? <p className="form-error">{libraryQuery.error.message}</p> : null}
+                {showLibrarySkeleton ? <SubjectCardSkeletonGrid count={6} /> : null}
                 {libraryQuery.data?.items.map((item) => (
                   <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={item.medium} subject={item.subject} item={item} />
                 ))}
-                {libraryQuery.data?.items.length === 0 ? <p className="empty-state">当前分类下还没有同步到内容。</p> : null}
+                {!showLibrarySkeleton && libraryQuery.data?.items.length === 0 ? <p className="empty-state">当前分类下还没有同步到内容。</p> : null}
               </div>
             </>
           ) : (
             <section className="panel login-required-panel">
               <strong>请先登录豆瓣</strong>
-              <p className="supporting">导入 Cookie 后才能查看你的个人收藏、评分和标记。</p>
+              <p className="supporting">导入 Cookie 后才能查看你的个人评分和标记</p>
               <button className="primary-button" type="button" onClick={() => navigate("/settings")}>去设置</button>
             </section>
           )}

@@ -1,5 +1,7 @@
 import type {
+  AuthMeResponse,
   DoubanSessionStatus,
+  DoubanLoginResponse,
   LibraryResponse,
   Medium,
   OverviewResponse,
@@ -54,6 +56,9 @@ async function request<T>(path: string, options: RequestInit = {}) {
   const contentType = response.headers.get("content-type") ?? "";
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
+    if (typeof payload === "string" && contentType.includes("text/html")) {
+      throw new ApiError("douban-lite API 没有连到当前前端，请启动项目自带 API，或检查 VITE_API_BASE_URL / VITE_API_PROXY_TARGET。", response.status);
+    }
     throw new ApiError(typeof payload === "string" ? payload : payload.error ?? "Request failed", response.status);
   }
   return payload as T;
@@ -102,8 +107,11 @@ export function getRanking(medium: Medium, board: string) {
   return request<RankingResponse>(`/api/rankings?${params.toString()}`);
 }
 
-export function getTimeline(scope: TimelineScope) {
-  const params = new URLSearchParams({ scope });
+export function getTimeline(scope: TimelineScope, start = 0) {
+  const params = new URLSearchParams({
+    scope,
+    start: String(start)
+  });
   return request<TimelineResponse>(`/api/timeline?${params.toString()}`);
 }
 
@@ -115,20 +123,24 @@ export function updateLibraryState(medium: Medium, doubanId: string, input: Upda
 }
 
 export function importDoubanSession(cookie: string) {
-  return request<DoubanSessionStatus>("/api/settings/douban-session/import", {
+  return request<DoubanLoginResponse>("/api/settings/douban-session/import", {
     method: "POST",
     body: JSON.stringify({ cookie })
   });
 }
 
 export function logoutDoubanSession() {
-  return request<DoubanSessionStatus>("/api/settings/douban-session/logout", {
+  return request<{ status: DoubanSessionStatus["status"] }>("/api/settings/douban-session/logout", {
     method: "POST"
   });
 }
 
 export function getDoubanSessionStatus() {
   return request<DoubanSessionStatus>("/api/settings/douban-session/status");
+}
+
+export function getAuthMe() {
+  return request<AuthMeResponse>("/api/session/me");
 }
 
 export function triggerManualSync() {

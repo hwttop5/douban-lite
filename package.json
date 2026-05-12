@@ -13,7 +13,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --workspace @douban-lite/api\" \"npm run dev --workspace @douban-lite/web\"",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run build --workspace @douban-lite/shared && npm run build --workspace @douban-lite/api && npm run build --workspace @douban-lite/web",
     "start": "node apps/api/dist/index.js",
     "test": "npm run test --workspace @douban-lite/shared && npm run test --workspace @douban-lite/api && npm run test --workspace @douban-lite/web",

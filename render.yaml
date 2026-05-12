@@ -13,6 +13,10 @@ services:
         value: production
       - key: DATA_DIR
         value: ./data
+      - key: APP_SECRET
+        generateValue: true
+      - key: SESSION_TTL_DAYS
+        value: "30"
       - key: DOUBAN_PUBLIC_BASE_URL
         value: https://m.douban.com
       - key: DOUBAN_WEB_BASE_URL

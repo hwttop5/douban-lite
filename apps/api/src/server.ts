@@ -1,21 +1,18 @@
-import express from "express";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import cors from "cors";
+import express from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Express, Request, Response } from "express";
-import {
-  importDoubanSessionSchema,
-  mediumSchema,
-  paginationSchema,
-  shelfStatusSchema,
-  timelineScopeSchema,
-  updateLibraryStateSchema
-} from "../../../packages/shared/src";
+import { importDoubanSessionSchema, mediumSchema, paginationSchema, shelfStatusSchema, timelineScopeSchema, updateLibraryStateSchema } from "../../../packages/shared/src";
 import type { AppConfig } from "./config";
 import { loadConfig } from "./config";
 import { AppDatabase } from "./db";
 import { DoubanClient } from "./douban/client";
+import { createSessionToken } from "./security";
 import { SyncService } from "./services/sync";
+
+const sessionCookieName = "douban_lite_session";
 
 export interface AppContext {
   app: Express;
@@ -25,8 +22,16 @@ export interface AppContext {
   close: () => void;
 }
 
+interface AuthenticatedRequest extends Request {
+  currentUserId?: string | null;
+}
+
 function badRequest(response: Response, message: string, issues?: unknown) {
   response.status(400).json({ error: message, issues });
+}
+
+function unauthorized(response: Response, message = "Authentication required") {
+  response.status(401).json({ error: message });
 }
 
 function isAllowedImageUrl(url: URL) {
@@ -34,14 +39,7 @@ function isAllowedImageUrl(url: URL) {
     return false;
   }
   const host = url.hostname.toLowerCase();
-  return (
-    host === "127.0.0.1" ||
-    host === "localhost" ||
-    host === "douban.com" ||
-    host.endsWith(".douban.com") ||
-    host === "doubanio.com" ||
-    host.endsWith(".doubanio.com")
-  );
+  return host === "127.0.0.1" || host === "localhost" || host === "douban.com" || host.endsWith(".douban.com") || host === "doubanio.com" || host.endsWith(".doubanio.com");
 }
 
 function allowedOrigins(origin: string | null) {
@@ -65,7 +63,7 @@ function allowedOrigins(origin: string | null) {
       }
     }
   } catch {
-    // Keep the configured origin as-is.
+    // ignore malformed origin
   }
   return Array.from(origins);
 }
@@ -75,11 +73,40 @@ function serveWebApp(app: Express, webDistDir: string) {
   if (!existsSync(indexFile)) {
     return;
   }
-
   app.use(express.static(webDistDir));
   app.get(/^\/(?!api(?:\/|$)|health$).*/, (_request, response) => {
     response.sendFile(indexFile);
   });
+}
+
+function resolveSessionToken(request: Request) {
+  const cookies = parseCookie(request.headers.cookie ?? "");
+  return cookies[sessionCookieName] ?? null;
+}
+
+function writeSessionCookie(response: Response, config: AppConfig, token: string | null, expiresAt?: Date) {
+  response.append(
+    "Set-Cookie",
+    serializeCookie(sessionCookieName, token ?? "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: config.nodeEnv === "production",
+      path: "/",
+      expires: token && expiresAt ? expiresAt : new Date(0)
+    })
+  );
+}
+
+function requireUser(request: AuthenticatedRequest, response: Response) {
+  if (!request.currentUserId) {
+    unauthorized(response);
+    return null;
+  }
+  return request.currentUserId;
+}
+
+function routeParam(value: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export function createApp(overrides?: Partial<AppConfig>): AppContext {
@@ -96,6 +123,11 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     })
   );
   app.use(express.json({ limit: "1mb" }));
+  app.use((request: AuthenticatedRequest, _response, next) => {
+    const user = sync.getAuthenticatedUser(resolveSessionToken(request));
+    request.currentUserId = user?.id ?? null;
+    next();
+  });
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -105,11 +137,50 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     });
   });
 
-  app.get("/api/me/overview", (_request, response) => {
-    response.json(sync.getOverview());
+  app.post("/api/auth/douban", async (request, response, next) => {
+    try {
+      const body = importDoubanSessionSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "Invalid douban session payload", body.error.flatten());
+        return;
+      }
+      const token = createSessionToken();
+      const expiresAt = new Date(Date.now() + config.sessionTtlDays * 24 * 60 * 60 * 1000);
+      const payload = await sync.loginWithDoubanCookie(body.data, token, expiresAt.toISOString());
+      writeSessionCookie(response, config, token, expiresAt);
+      response.json(payload);
+    } catch (error) {
+      next(error);
+    }
   });
 
-  app.get("/api/library", async (request, response, next) => {
+  app.get("/api/auth/me", (request: AuthenticatedRequest, response) => {
+    response.json(sync.getAuthMe(request.currentUserId ?? null));
+  });
+
+  app.get("/api/session/me", (request: AuthenticatedRequest, response) => {
+    response.json(sync.getAuthMe(request.currentUserId ?? null));
+  });
+
+  app.post("/api/auth/logout", (request: AuthenticatedRequest, response) => {
+    sync.logout(resolveSessionToken(request));
+    writeSessionCookie(response, config, null);
+    response.json({ ok: true });
+  });
+
+  app.get("/api/me/overview", (request: AuthenticatedRequest, response) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    response.json(sync.getOverview(userId));
+  });
+
+  app.get("/api/library", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
     try {
       const medium = mediumSchema.safeParse(request.query.medium);
       const status = request.query.status == null ? null : shelfStatusSchema.safeParse(request.query.status);
@@ -122,20 +193,13 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         });
         return;
       }
-      response.json(
-        await sync.listLibrary({
-          medium: medium.data,
-          status: status?.success ? status.data : undefined,
-          page: pagination.data.page,
-          pageSize: pagination.data.pageSize
-        })
-      );
+      response.json(await sync.listLibrary(userId, { medium: medium.data, status: status?.success ? status.data : undefined, page: pagination.data.page, pageSize: pagination.data.pageSize }));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/subjects/search", async (request, response, next) => {
+  app.get("/api/subjects/search", async (request: AuthenticatedRequest, response, next) => {
     try {
       const medium = mediumSchema.safeParse(request.query.medium);
       const query = String(request.query.q ?? "").trim();
@@ -143,13 +207,13 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         badRequest(response, "Invalid search query");
         return;
       }
-      response.json(await sync.searchSubjects(medium.data, query));
+      response.json(await sync.searchSubjects(request.currentUserId ?? null, medium.data, query));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/subjects/:medium/:doubanId/comments", async (request, response, next) => {
+  app.get("/api/subjects/:medium/:doubanId/comments", async (request: AuthenticatedRequest, response, next) => {
     try {
       const medium = mediumSchema.safeParse(request.params.medium);
       const start = Math.max(0, Number(request.query.start ?? 0));
@@ -158,26 +222,26 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         badRequest(response, "Invalid comments query");
         return;
       }
-      response.json(await sync.getSubjectComments(medium.data, request.params.doubanId, Math.floor(start), Math.floor(limit)));
+      response.json(await sync.getSubjectComments(request.currentUserId ?? null, medium.data, routeParam(request.params.doubanId), Math.floor(start), Math.floor(limit)));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/subjects/:medium/:doubanId", async (request, response, next) => {
+  app.get("/api/subjects/:medium/:doubanId", async (request: AuthenticatedRequest, response, next) => {
     try {
       const medium = mediumSchema.safeParse(request.params.medium);
       if (!medium.success) {
         badRequest(response, "Invalid medium");
         return;
       }
-      response.json(await sync.getSubjectDetail(medium.data, request.params.doubanId));
+      response.json(await sync.getSubjectDetail(request.currentUserId ?? null, medium.data, routeParam(request.params.doubanId)));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/rankings", async (request, response, next) => {
+  app.get("/api/rankings", async (request: AuthenticatedRequest, response, next) => {
     try {
       const medium = mediumSchema.safeParse(request.query.medium);
       const board = String(request.query.board ?? "");
@@ -185,26 +249,39 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         badRequest(response, "Invalid ranking query");
         return;
       }
-      response.json(await sync.getRanking(medium.data, board));
+      response.json(await sync.getRanking(request.currentUserId ?? null, medium.data, board));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/timeline", async (request, response, next) => {
+  app.get("/api/timeline", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
     try {
       const scope = timelineScopeSchema.safeParse(request.query.scope ?? "following");
       if (!scope.success) {
         badRequest(response, "Invalid timeline query", scope.error.flatten());
         return;
       }
-      response.json(await sync.getTimeline(scope.data));
+      const start = Number(request.query.start ?? 0);
+      if (!Number.isInteger(start) || start < 0) {
+        badRequest(response, "Invalid timeline query", { start: "start must be a non-negative integer" });
+        return;
+      }
+      response.json(await sync.getTimeline(userId, scope.data, start));
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/library/:medium/:doubanId/state", async (request, response, next) => {
+  app.post("/api/library/:medium/:doubanId/state", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
     try {
       const medium = mediumSchema.safeParse(request.params.medium);
       const body = updateLibraryStateSchema.safeParse(request.body);
@@ -215,15 +292,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         });
         return;
       }
-      response.json(
-        await sync.updateLibraryState(medium.data, request.params.doubanId, {
-          status: body.data.status,
-          rating: body.data.rating ?? null,
-          comment: body.data.comment ?? "",
-          tags: body.data.tags ?? [],
-          syncToTimeline: body.data.syncToTimeline ?? true
-        })
-      );
+      response.json(await sync.updateLibraryState(userId, medium.data, routeParam(request.params.doubanId), { status: body.data.status, rating: body.data.rating ?? null, comment: body.data.comment ?? "", tags: body.data.tags ?? [], syncToTimeline: body.data.syncToTimeline ?? true }));
     } catch (error) {
       next(error);
     }
@@ -236,18 +305,28 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         badRequest(response, "Invalid douban session payload", body.error.flatten());
         return;
       }
-      response.json(await sync.importDoubanSession(body.data));
+      const token = createSessionToken();
+      const expiresAt = new Date(Date.now() + config.sessionTtlDays * 24 * 60 * 60 * 1000);
+      const payload = await sync.loginWithDoubanCookie(body.data, token, expiresAt.toISOString());
+      writeSessionCookie(response, config, token, expiresAt);
+      response.json(payload.sessionStatus);
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/settings/douban-session/logout", (_request, response) => {
-    response.json(sync.logoutDoubanSession());
+  app.post("/api/settings/douban-session/logout", (request: AuthenticatedRequest, response) => {
+    sync.logout(resolveSessionToken(request));
+    writeSessionCookie(response, config, null);
+    response.json({ status: "missing", peopleId: null, displayName: null, avatarUrl: null, ipLocation: null, lastCheckedAt: null, lastError: null });
   });
 
-  app.get("/api/settings/douban-session/status", (_request, response) => {
-    response.json(sync.getSessionStatus());
+  app.get("/api/settings/douban-session/status", (request: AuthenticatedRequest, response) => {
+    if (!request.currentUserId) {
+      response.json({ status: "missing", peopleId: null, displayName: null, avatarUrl: null, ipLocation: null, lastCheckedAt: null, lastError: null });
+      return;
+    }
+    response.json(sync.getSessionStatus(request.currentUserId));
   });
 
   app.get("/api/image", async (request, response, next) => {
@@ -264,7 +343,6 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         badRequest(response, "Image host is not allowed");
         return;
       }
-
       const upstream = await fetch(imageUrl, {
         headers: {
           "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -276,7 +354,6 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         response.status(upstream.status).json({ error: `Image request failed: ${upstream.status}` });
         return;
       }
-
       const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
       const buffer = Buffer.from(await upstream.arrayBuffer());
       response.setHeader("content-type", contentType);
@@ -287,16 +364,24 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     }
   });
 
-  app.post("/api/sync/pull", async (_request, response, next) => {
+  app.post("/api/sync/pull", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
     try {
-      response.json(await sync.triggerManualPull());
+      response.json(await sync.triggerManualPull(userId));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/sync/jobs/:jobId", (request, response) => {
-    const job = sync.getSyncJob(request.params.jobId);
+  app.get("/api/sync/jobs/:jobId", (request: AuthenticatedRequest, response) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    const job = sync.getSyncJob(userId, routeParam(request.params.jobId));
     if (!job) {
       response.status(404).json({ error: "Job not found" });
       return;
@@ -304,8 +389,12 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     response.json(job);
   });
 
-  app.get("/api/sync/events", (_request, response) => {
-    response.json({ items: sync.listSyncEvents() });
+  app.get("/api/sync/events", (request: AuthenticatedRequest, response) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    response.json({ items: sync.listSyncEvents(userId) });
   });
 
   serveWebApp(app, config.webDistDir);

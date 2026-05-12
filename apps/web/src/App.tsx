@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { mediumLabels, mediums } from "../../../packages/shared/src";
-import { getDoubanSessionStatus, proxiedImageUrl } from "./api";
+import { getAuthMe, proxiedImageUrl } from "./api";
 import { AppContextProvider, useAppContext } from "./app-context";
 import { SegmentedControl } from "./components/segmented-control";
 import { MyPage } from "./pages/my-page";
@@ -45,8 +45,9 @@ function AppNavigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const sessionQuery = useQuery({
-    queryKey: ["douban-session-status"],
-    queryFn: getDoubanSessionStatus
+    queryKey: ["auth-me"],
+    queryFn: getAuthMe,
+    retry: false
   });
   const showMediumPicker =
     !location.pathname.startsWith("/settings") &&
@@ -63,11 +64,13 @@ function AppNavigation() {
     }
   }, [location.pathname, navigate, showRankingsNav, showTimelineNav]);
 
-  const session = sessionQuery.data;
-  const hasDoubanSession = session?.status === "valid";
-  const avatarUrl = hasDoubanSession ? proxiedImageUrl(session.avatarUrl) : null;
-  const accountLabel = hasDoubanSession ? (session.displayName ?? "豆瓣用户") : "未登录";
-  const accountMeta = hasDoubanSession ? `${session.ipLocation ?? "未知地区"} / 已登录 / 同步可用` : "导入 Cookie 后同步收藏";
+  const auth = sessionQuery.data;
+  const session = auth?.sessionStatus;
+  const user = auth?.user;
+  const hasDoubanSession = auth?.authenticated && session?.status === "valid";
+  const avatarUrl = hasDoubanSession ? proxiedImageUrl(user?.avatarUrl ?? session?.avatarUrl) : null;
+  const accountLabel = hasDoubanSession ? (user?.displayName ?? session?.displayName ?? "豆瓣用户") : "未登录";
+  const accountMeta = hasDoubanSession ? `${user?.ipLocation ?? session?.ipLocation ?? "未知地区"} / 已登录 / 同步可用` : "导入自己的豆瓣 Cookie 后使用";
   const mediumPicker = showMediumPicker ? (
     <SegmentedControl
       value={medium}

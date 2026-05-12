@@ -11,6 +11,7 @@ import {
   parseSearchResults,
   parseSubjectComments,
   parseSubjectDetail,
+  parseSubjectDetailExtras,
   parseTimeline,
   parseUserCollection
 } from "../src/douban/parsers";
@@ -48,6 +49,7 @@ describe("Douban parsers", () => {
       expect(result.items).toHaveLength(1);
       expect(result.items[0].subject.doubanId).toBe(expectedIds[medium]);
       expect(result.items[0].status).toBe("wish");
+      expect(result.items[0].comment).toBeNull();
     });
 
     it(`parses ${medium} ranking page`, () => {
@@ -63,12 +65,176 @@ describe("Douban parsers", () => {
     expect(parseAuthToken(html)).toBe("test-ck");
   });
 
+  it("parses movie detail extras", () => {
+    const extras = parseSubjectDetailExtras(
+      `
+      <div id="celebrities">
+        <h2><a href="/subject/37116612/celebrities">Cast and crew</a></h2>
+        <ul>
+          <li class="celebrity">
+            <a href="/celebrity/1/"><div class="avatar" style="background-image:url(/images/staff.jpg)"></div></a>
+            <div class="info">
+              <span class="name"><a href="/celebrity/1/">Director One</a></span>
+              <span class="role" title="Director">Director</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <a class="related-pic-video" href="/trailer/1/" title="Official Trailer" style="background-image:url(/images/trailer.jpg)">
+        <span class="type-title">Trailer</span>
+      </a>
+      <a href="/photos/photo/1/"><img src="/images/still.jpg" alt="Still One" /></a>
+      <div id="recommendations">
+        <h2><a href="/subject/37116612/recommendations">Recommendations</a></h2>
+        <dl>
+          <dt><a href="/subject/1292720/"><img src="/images/forrest.jpg" alt="Forrest Gump" /></a></dt>
+          <dd><a href="/subject/1292720/">Forrest Gump</a><span class="rating_nums">9.5</span></dd>
+        </dl>
+      </div>
+      `,
+      "https://movie.douban.com/subject/37116612/",
+      "movie",
+      "37116612"
+    );
+
+    expect(extras.staff).toHaveLength(1);
+    expect(extras.staff[0]).toMatchObject({ name: "Director One", role: "Director" });
+    expect(extras.media.videos[0]?.url).toBe("https://movie.douban.com/trailer/1/");
+    expect(extras.media.images[0]?.url).toBe("https://movie.douban.com/photos/photo/1/");
+    expect(extras.relatedSubjects[0]?.doubanId).toBe("1292720");
+    expect(extras.sectionLinks.map((item) => item.key)).toEqual(expect.arrayContaining(["related", "staff", "videos", "images"]));
+  });
+
+  it("parses music detail extras", () => {
+    const extras = parseSubjectDetailExtras(
+      `
+      <div class="track-list">
+        <ul class="track-items indent">
+          <li>1. Track One</li>
+          <li>2. Track Two</li>
+        </ul>
+      </div>
+      <div id="db-rec-section">
+        <h2><a href="/subject/30401866/recommend">People also liked</a></h2>
+        <dl>
+          <dt><a href="/subject/20427949/"><img src="/images/music.jpg" alt="Related Album" /></a></dt>
+          <dd><a href="/subject/20427949/">Related Album</a></dd>
+        </dl>
+      </div>
+      `,
+      "https://music.douban.com/subject/30401866/",
+      "music",
+      "30401866"
+    );
+
+    expect(extras.trackList).toEqual(["Track One", "Track Two"]);
+    expect(extras.relatedSubjects[0]?.doubanId).toBe("20427949");
+    expect(extras.sectionLinks.find((item) => item.key === "related")?.url).toBe("https://music.douban.com/subject/30401866/recommend");
+  });
+
+  it("parses book detail extras", () => {
+    const extras = parseSubjectDetailExtras(
+      `
+      <div id="dir_37817685_short">Prologue<br/>Chapter One<br/>...</div>
+      <div id="dir_37817685_full">Prologue<br/>Chapter One<br/>Chapter Two<br/>Epilogue<br/></div>
+      <div id="db-rec-section">
+        <dl>
+          <dt><a href="/subject/1003078/"><img src="/images/book.jpg" alt="Related Book" /></a></dt>
+          <dd><a href="/subject/1003078/">Related Book</a></dd>
+        </dl>
+      </div>
+      `,
+      "https://book.douban.com/subject/37817685/",
+      "book",
+      "37817685"
+    );
+
+    expect(extras.tableOfContents).toEqual(["Prologue", "Chapter One", "Chapter Two", "Epilogue"]);
+    expect(extras.relatedSubjects[0]?.doubanId).toBe("1003078");
+  });
+
+  it("parses game detail extras", () => {
+    const extras = parseSubjectDetailExtras(
+      `
+      <div class="mod">
+        <h2>Game videos</h2>
+        <ul>
+          <li class="video-mini">
+            <a class="video" href="/game/21355730/video/1/"><img src="/images/game-video.jpg" alt="Gameplay video" /></a>
+            <a class="title" href="/game/21355730/video/1/"><span>Gameplay video</span></a>
+          </li>
+        </ul>
+      </div>
+      <div class="mod">
+        <h2>Game photos</h2>
+        <ul>
+          <li><a href="/game/21355730/photo/1/"><img src="/images/game-photo.jpg" alt="Screenshot" /></a></li>
+        </ul>
+      </div>
+      <div id="db-rec-section">
+        <dl>
+          <dt><a href="/game/26791492/"><img src="/images/game-related.jpg" alt="Related Game" /></a></dt>
+          <dd><a href="/game/26791492/">Related Game</a></dd>
+        </dl>
+      </div>
+      `,
+      "https://www.douban.com/game/21355730/",
+      "game",
+      "21355730"
+    );
+
+    expect(extras.media.videos[0]?.url).toBe("https://www.douban.com/game/21355730/video/1/");
+    expect(extras.media.images[0]?.url).toBe("https://www.douban.com/game/21355730/photo/1/");
+    expect(extras.relatedSubjects[0]?.doubanId).toBe("26791492");
+    expect(extras.sectionLinks.map((item) => item.key)).toEqual(expect.arrayContaining(["related", "videos", "images"]));
+  });
+
   it("parses selected status and rating from interest form", () => {
     const html = loadFixture("movie.detail.html");
     expect(parseInterestSelection(html, "https://example.test/movie/subject/1292052")).toEqual({
       status: "wish",
-      rating: 5
+      rating: 5,
+      comment: null
     });
+  });
+
+  it("parses the current user's comment from interest form", () => {
+    const selection = parseInterestSelection(
+      `
+      <form data-interest-form action="/j/subject/interest" method="POST">
+        <input type="hidden" name="interest" value="collect" />
+        <select name="rating"><option value="4" selected>4</option></select>
+        <textarea name="comment">这次主要看系统设计。</textarea>
+      </form>
+      `,
+      "https://movie.douban.com/subject/1292052/"
+    );
+
+    expect(selection).toEqual({
+      status: "done",
+      rating: 4,
+      comment: "这次主要看系统设计。"
+    });
+  });
+
+  it("parses the user's collection comment from collection items", () => {
+    const result = parseUserCollection(
+      `
+      <article class="collection-item" data-status="collect">
+        <a href="https://movie.douban.com/subject/1292052/"><img src="/cover.jpg" /></a>
+        <h3>肖申克的救赎</h3>
+        <p class="meta">1994 / Frank Darabont</p>
+        <span class="rating" data-rating="4"></span>
+        <span class="comment">喔喔喔喔喔</span>
+      </article>
+      `,
+      "https://movie.douban.com/people/demo/collect",
+      "movie",
+      "done"
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].comment).toBe("喔喔喔喔喔");
   });
 
   it("cleans script and report noise from subject summary", () => {
@@ -198,5 +364,83 @@ describe("Douban parsers", () => {
       { label: "转发", count: 1 },
       { label: "赞", count: 5 }
     ]);
+  });
+
+  it("strips trailing engagement text from timeline body and preserves display order", () => {
+    const items = parseTimeline(
+      `
+      <div class="new-status status-wrapper" data-sid="s-tail">
+        <div class="status-item" data-sid="s-tail">
+          <a href="/people/demo-user/"><img src="/avatar.jpg" />Jun</a>
+          <p class="status-saying">Jun 说：</p>
+          <blockquote>北海道三天之旅结束了，绕渡岛半岛、羊蹄山、支笏洞爷一圈自驾。 回应 赞 (6) 转发 (2)</blockquote>
+          <a href="/people/demo-user/status/s-tail/">5月3日</a>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/"
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].content).toBe("北海道三天之旅结束了，绕渡岛半岛、羊蹄山、支笏洞爷一圈自驾。");
+    expect(items[0].engagements).toEqual([
+      { label: "回应", count: null },
+      { label: "赞", count: 6 },
+      { label: "转发", count: 2 }
+    ]);
+  });
+
+  it("ignores inline script payloads in timeline content", () => {
+    const items = parseTimeline(
+      `
+      <div class="new-status status-wrapper" data-sid="s2">
+        <div class="status-item" data-sid="s2" data-action="玩过">
+          <a href="/people/demo-user/"><img src="/avatar.jpg" />好友 B</a>
+          <p class="status-saying">好友 B 玩过</p>
+          <blockquote>北海道三天之旅结束了，绕渡岛半岛、羊蹄山、支笏洞爷一圈自驾。</blockquote>
+          <script>
+            (function () {
+              var currentScript = document.currentScript;
+              var photos = [{"image":{"normal":{"url":"https://img3.doubanio.com/view/group_topic/l/public/p1.jpg"}}}];
+              currentScript.parentElement.appendChild(document.createElement('div'));
+            })();
+          </script>
+          <a href="/game/33398281/"><img src="/cover.jpg" />剑星</a>
+          <a href="/people/demo-user/status/s2/">5月3日</a>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/"
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].content).toContain("北海道三天之旅结束了");
+    expect(items[0].content).not.toContain("currentScript");
+    expect(items[0].content).not.toContain("photos");
+  });
+  it("treats image-only statuses as photo posts instead of linked subjects", () => {
+    const items = parseTimeline(
+      `
+      <div class="new-status status-wrapper" data-sid="s3">
+        <div class="status-item" data-sid="s3">
+          <a href="/people/demo-user/"><img src="/avatar.jpg" />Friend C</a>
+          <p class="status-saying">Friend C said</p>
+          <blockquote>Trip wrap-up with photos.</blockquote>
+          <script>
+            const photos = [{"image":{"normal":{"url":"https://img3.doubanio.com/view/group_topic/l/public/p1.jpg"}}}];
+          </script>
+          <a href="/people/demo-user/status/s3/">May 3</a>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/"
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].subjectTitle).toBeNull();
+    expect(items[0].subjectUrl).toBeNull();
+    expect(items[0].subjectCoverUrl).toBeNull();
+    expect(items[0].photoUrls).toEqual(["https://img3.doubanio.com/view/group_topic/l/public/p1.jpg"]);
+    expect(items[0].content).toContain("Trip wrap-up with photos.");
   });
 });

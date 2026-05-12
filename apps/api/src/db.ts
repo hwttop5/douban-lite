@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
 import type {
+  AppUser,
   DoubanSessionStatus,
   LibraryEntry,
   LibraryResponse,
@@ -13,13 +14,13 @@ import type {
   RankingResponse,
   ShelfStatus,
   SubjectRecord,
-  TimelineItem,
-  TimelineResponse,
-  TimelineScope,
   SyncEventRecord,
   SyncJobRecord,
   SyncJobStatus,
   SyncJobType,
+  TimelineItem,
+  TimelineResponse,
+  TimelineScope,
   UserItemRecord
 } from "../../../packages/shared/src";
 import { shelfStatuses } from "../../../packages/shared/src";
@@ -76,6 +77,18 @@ function mapUserItem(row: Row, prefix = ""): UserItemRecord {
   };
 }
 
+function mapAppUser(row: Row): AppUser {
+  return {
+    id: String(row.id),
+    peopleId: String(row.people_id),
+    displayName: (row.display_name as string | null) ?? null,
+    avatarUrl: (row.avatar_url as string | null) ?? null,
+    ipLocation: (row.ip_location as string | null) ?? null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
 function mapLibraryEntry(row: Row): LibraryEntry {
   return {
     ...mapUserItem(row, "user_"),
@@ -86,6 +99,7 @@ function mapLibraryEntry(row: Row): LibraryEntry {
 function mapJob(row: Row): SyncJobRecord {
   return {
     id: String(row.id),
+    userId: String(row.user_id),
     type: row.type as SyncJobType,
     status: row.status as SyncJobStatus,
     payload: parseJson<Record<string, unknown>>(row.payload_json, {}),
@@ -95,14 +109,24 @@ function mapJob(row: Row): SyncJobRecord {
   };
 }
 
+function quoted(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export class AppDatabase {
   private readonly db: InstanceType<typeof DatabaseSync>;
 
   constructor(file: string) {
     mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
+    this.db.exec("PRAGMA journal_mode = WAL;");
+    this.createSharedTables();
+    this.createMultiUserTables();
+    this.migrateLegacySchema();
+  }
+
+  private createSharedTables() {
     this.db.exec(`
-      PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS subjects (
         medium TEXT NOT NULL,
         douban_id TEXT NOT NULL,
@@ -118,7 +142,51 @@ export class AppDatabase {
         PRIMARY KEY (medium, douban_id)
       );
 
+      CREATE TABLE IF NOT EXISTS ranking_snapshots (
+        medium TEXT NOT NULL,
+        board_key TEXT NOT NULL,
+        board_name TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (medium, board_key)
+      );
+    `);
+  }
+
+  private createMultiUserTables() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        people_id TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        avatar_url TEXT,
+        ip_location TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS app_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS douban_sessions (
+        user_id TEXT PRIMARY KEY,
+        cookie_encrypted TEXT NOT NULL,
+        people_id TEXT,
+        display_name TEXT,
+        avatar_url TEXT,
+        ip_location TEXT,
+        status TEXT NOT NULL,
+        last_checked_at TEXT,
+        last_error TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS user_items (
+        user_id TEXT NOT NULL,
         medium TEXT NOT NULL,
         douban_id TEXT NOT NULL,
         status TEXT NOT NULL,
@@ -131,26 +199,20 @@ export class AppDatabase {
         updated_at TEXT NOT NULL,
         last_synced_at TEXT,
         last_pushed_at TEXT,
-        PRIMARY KEY (medium, douban_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS ranking_snapshots (
-        medium TEXT NOT NULL,
-        board_key TEXT NOT NULL,
-        board_name TEXT NOT NULL,
-        items_json TEXT NOT NULL,
-        fetched_at TEXT NOT NULL,
-        PRIMARY KEY (medium, board_key)
+        PRIMARY KEY (user_id, medium, douban_id)
       );
 
       CREATE TABLE IF NOT EXISTS timeline_snapshots (
-        scope TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
         items_json TEXT NOT NULL,
-        fetched_at TEXT NOT NULL
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, scope)
       );
 
       CREATE TABLE IF NOT EXISTS sync_jobs (
         id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
         type TEXT NOT NULL,
         status TEXT NOT NULL,
         payload_json TEXT NOT NULL DEFAULT '{}',
@@ -161,37 +223,191 @@ export class AppDatabase {
 
       CREATE TABLE IF NOT EXISTS sync_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
         level TEXT NOT NULL,
         message TEXT NOT NULL,
         context_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL
       );
-
-      CREATE TABLE IF NOT EXISTS douban_session (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        cookie TEXT NOT NULL,
-        people_id TEXT,
-        display_name TEXT,
-        avatar_url TEXT,
-        ip_location TEXT,
-        status TEXT NOT NULL,
-        last_checked_at TEXT,
-        last_error TEXT
-      );
     `);
-    this.ensureColumn("douban_session", "display_name", "TEXT");
-    this.ensureColumn("douban_session", "avatar_url", "TEXT");
-    this.ensureColumn("douban_session", "ip_location", "TEXT");
-    this.ensureColumn("user_items", "comment", "TEXT");
-    this.ensureColumn("user_items", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
-    this.ensureColumn("user_items", "sync_to_timeline", "INTEGER NOT NULL DEFAULT 1");
   }
 
-  private ensureColumn(table: string, column: string, definition: string) {
+  private tableExists(name: string) {
+    const row = this.db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) as Row | undefined;
+    return Boolean(row);
+  }
+
+  private columnExists(table: string, column: string) {
     const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Row[];
-    if (!columns.some((row) => row.name === column)) {
-      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    return columns.some((row) => row.name === column);
+  }
+
+  private migrateLegacySchema() {
+    this.migrateLegacyDoubanSession();
+    this.migrateLegacyUserItems();
+    this.migrateLegacyTimelineSnapshots();
+    this.migrateLegacySyncJobs();
+    this.migrateLegacySyncEvents();
+  }
+
+  private migrateLegacyDoubanSession() {
+    if (!this.tableExists("douban_session")) {
+      return;
     }
+    const row = this.db.prepare(`SELECT * FROM douban_session WHERE id = 1`).get() as Row | undefined;
+    if (!row) {
+      return;
+    }
+    const peopleId = (row.people_id as string | null) ?? null;
+    if (!peopleId) {
+      return;
+    }
+    const user = this.upsertUserByPeopleId({
+      peopleId,
+      displayName: (row.display_name as string | null) ?? null,
+      avatarUrl: (row.avatar_url as string | null) ?? null,
+      ipLocation: (row.ip_location as string | null) ?? null
+    });
+    const existing = this.db.prepare(`SELECT 1 FROM douban_sessions WHERE user_id = ?`).get(user.id) as Row | undefined;
+    if (!existing) {
+      this.db
+        .prepare(`
+          INSERT INTO douban_sessions (user_id, cookie_encrypted, people_id, display_name, avatar_url, ip_location, status, last_checked_at, last_error)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          user.id,
+          String(row.cookie),
+          peopleId,
+          (row.display_name as string | null) ?? null,
+          (row.avatar_url as string | null) ?? null,
+          (row.ip_location as string | null) ?? null,
+          String(row.status ?? "valid"),
+          (row.last_checked_at as string | null) ?? null,
+          (row.last_error as string | null) ?? null
+        );
+    }
+  }
+
+  private migrateLegacyUserItems() {
+    if (!this.tableExists("user_items") || this.columnExists("user_items", "user_id")) {
+      return;
+    }
+    const legacyOwner = this.legacyOwnerId();
+    if (!legacyOwner) {
+      return;
+    }
+    this.db.exec(`
+      ALTER TABLE user_items RENAME TO user_items_legacy;
+      CREATE TABLE IF NOT EXISTS user_items (
+        user_id TEXT NOT NULL,
+        medium TEXT NOT NULL,
+        douban_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        rating INTEGER,
+        comment TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        sync_to_timeline INTEGER NOT NULL DEFAULT 1,
+        sync_state TEXT NOT NULL,
+        error_message TEXT,
+        updated_at TEXT NOT NULL,
+        last_synced_at TEXT,
+        last_pushed_at TEXT,
+        PRIMARY KEY (user_id, medium, douban_id)
+      );
+      INSERT INTO user_items (
+        user_id, medium, douban_id, status, rating, comment, tags_json, sync_to_timeline, sync_state, error_message,
+        updated_at, last_synced_at, last_pushed_at
+      )
+      SELECT
+        ${quoted(legacyOwner)},
+        medium, douban_id, status, rating, comment,
+        COALESCE(tags_json, '[]'),
+        COALESCE(sync_to_timeline, 1),
+        sync_state, error_message, updated_at, last_synced_at, last_pushed_at
+      FROM user_items_legacy;
+      DROP TABLE user_items_legacy;
+    `);
+  }
+
+  private migrateLegacyTimelineSnapshots() {
+    if (!this.tableExists("timeline_snapshots") || this.columnExists("timeline_snapshots", "user_id")) {
+      return;
+    }
+    const legacyOwner = this.legacyOwnerId();
+    if (!legacyOwner) {
+      return;
+    }
+    this.db.exec(`
+      ALTER TABLE timeline_snapshots RENAME TO timeline_snapshots_legacy;
+      CREATE TABLE IF NOT EXISTS timeline_snapshots (
+        user_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, scope)
+      );
+      INSERT INTO timeline_snapshots (user_id, scope, items_json, fetched_at)
+      SELECT ${quoted(legacyOwner)}, scope, items_json, fetched_at FROM timeline_snapshots_legacy;
+      DROP TABLE timeline_snapshots_legacy;
+    `);
+  }
+
+  private migrateLegacySyncJobs() {
+    if (!this.tableExists("sync_jobs") || this.columnExists("sync_jobs", "user_id")) {
+      return;
+    }
+    const legacyOwner = this.legacyOwnerId();
+    if (!legacyOwner) {
+      return;
+    }
+    this.db.exec(`
+      ALTER TABLE sync_jobs RENAME TO sync_jobs_legacy;
+      CREATE TABLE IF NOT EXISTS sync_jobs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        error_message TEXT
+      );
+      INSERT INTO sync_jobs (id, user_id, type, status, payload_json, started_at, finished_at, error_message)
+      SELECT id, ${quoted(legacyOwner)}, type, status, payload_json, started_at, finished_at, error_message
+      FROM sync_jobs_legacy;
+      DROP TABLE sync_jobs_legacy;
+    `);
+  }
+
+  private migrateLegacySyncEvents() {
+    if (!this.tableExists("sync_events") || this.columnExists("sync_events", "user_id")) {
+      return;
+    }
+    const legacyOwner = this.legacyOwnerId();
+    if (!legacyOwner) {
+      return;
+    }
+    this.db.exec(`
+      ALTER TABLE sync_events RENAME TO sync_events_legacy;
+      CREATE TABLE IF NOT EXISTS sync_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        context_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO sync_events (id, user_id, level, message, context_json, created_at)
+      SELECT id, ${quoted(legacyOwner)}, level, message, context_json, created_at
+      FROM sync_events_legacy;
+      DROP TABLE sync_events_legacy;
+    `);
+  }
+
+  private legacyOwnerId() {
+    const row = this.db.prepare(`SELECT user_id FROM douban_sessions LIMIT 1`).get() as Row | undefined;
+    return row ? String(row.user_id) : null;
   }
 
   close() {
@@ -233,9 +449,7 @@ export class AppDatabase {
   }
 
   getSubject(medium: Medium, doubanId: string): SubjectRecord | null {
-    const row = this.db
-      .prepare(`SELECT * FROM subjects WHERE medium = ? AND douban_id = ?`)
-      .get(medium, doubanId) as Row | undefined;
+    const row = this.db.prepare(`SELECT * FROM subjects WHERE medium = ? AND douban_id = ?`).get(medium, doubanId) as Row | undefined;
     return row ? mapSubject(row) : null;
   }
 
@@ -259,20 +473,98 @@ export class AppDatabase {
     return rows.map((row) => mapSubject(row));
   }
 
-  getUserItem(medium: Medium, doubanId: string): UserItemRecord | null {
+  upsertUserByPeopleId(input: {
+    peopleId: string;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    ipLocation?: string | null;
+  }): AppUser {
+    const existing = this.db.prepare(`SELECT * FROM users WHERE people_id = ?`).get(input.peopleId) as Row | undefined;
+    const now = nowIso();
+    if (!existing) {
+      const user: AppUser = {
+        id: randomUUID(),
+        peopleId: input.peopleId,
+        displayName: input.displayName ?? null,
+        avatarUrl: input.avatarUrl ?? null,
+        ipLocation: input.ipLocation ?? null,
+        createdAt: now,
+        updatedAt: now
+      };
+      this.db
+        .prepare(`
+          INSERT INTO users (id, people_id, display_name, avatar_url, ip_location, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(user.id, user.peopleId, user.displayName ?? null, user.avatarUrl ?? null, user.ipLocation ?? null, user.createdAt, user.updatedAt);
+      return user;
+    }
+    this.db
+      .prepare(`
+        UPDATE users
+        SET display_name = COALESCE(?, display_name),
+            avatar_url = COALESCE(?, avatar_url),
+            ip_location = COALESCE(?, ip_location),
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .run(input.displayName ?? null, input.avatarUrl ?? null, input.ipLocation ?? null, now, String(existing.id));
+    return this.getUserById(String(existing.id))!;
+  }
+
+  getUserById(userId: string): AppUser | null {
+    const row = this.db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId) as Row | undefined;
+    return row ? mapAppUser(row) : null;
+  }
+
+  listUserIdsWithDoubanSessions() {
+    const rows = this.db.prepare(`SELECT user_id FROM douban_sessions`).all() as Row[];
+    return rows.map((row) => String(row.user_id));
+  }
+
+  createAppSession(userId: string, tokenHash: string, expiresAt: string) {
+    const id = randomUUID();
+    this.db
+      .prepare(`
+        INSERT INTO app_sessions (id, user_id, token_hash, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(id, userId, tokenHash, nowIso(), expiresAt);
+  }
+
+  getSessionByTokenHash(tokenHash: string): { userId: string; expiresAt: string } | null {
     const row = this.db
-      .prepare(`SELECT * FROM user_items WHERE medium = ? AND douban_id = ?`)
-      .get(medium, doubanId) as Row | undefined;
+      .prepare(`SELECT user_id, expires_at FROM app_sessions WHERE token_hash = ?`)
+      .get(tokenHash) as Row | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      userId: String(row.user_id),
+      expiresAt: String(row.expires_at)
+    };
+  }
+
+  deleteSessionByTokenHash(tokenHash: string) {
+    this.db.prepare(`DELETE FROM app_sessions WHERE token_hash = ?`).run(tokenHash);
+  }
+
+  deleteExpiredSessions() {
+    this.db.prepare(`DELETE FROM app_sessions WHERE expires_at <= ?`).run(nowIso());
+  }
+
+  getUserItem(userId: string, medium: Medium, doubanId: string): UserItemRecord | null {
+    const row = this.db.prepare(`SELECT * FROM user_items WHERE user_id = ? AND medium = ? AND douban_id = ?`).get(userId, medium, doubanId) as Row | undefined;
     return row ? mapUserItem(row) : null;
   }
 
-  getSubjectDetail(medium: Medium, doubanId: string) {
+  getSubjectDetail(userId: string | null, medium: Medium, doubanId: string) {
     const subject = this.getSubject(medium, doubanId);
-    const userItem = this.getUserItem(medium, doubanId);
+    const userItem = userId ? this.getUserItem(userId, medium, doubanId) : null;
     return { subject, userItem };
   }
 
-  upsertUserItem(item: {
+  upsertUserItem(userId: string, item: {
     medium: Medium;
     doubanId: string;
     status: ShelfStatus;
@@ -287,23 +579,18 @@ export class AppDatabase {
     lastPushedAt?: string | null;
   }) {
     const updatedAt = item.updatedAt ?? nowIso();
-    const tagsJson = item.tags === undefined ? null : JSON.stringify(item.tags);
-    const syncToTimeline = item.syncToTimeline === undefined ? null : item.syncToTimeline ? 1 : 0;
-    const hasComment = item.comment !== undefined ? 1 : 0;
-    const hasTags = item.tags !== undefined ? 1 : 0;
-    const hasSyncToTimeline = item.syncToTimeline !== undefined ? 1 : 0;
     this.db
       .prepare(`
         INSERT INTO user_items (
-          medium, douban_id, status, rating, comment, tags_json, sync_to_timeline, sync_state, error_message,
+          user_id, medium, douban_id, status, rating, comment, tags_json, sync_to_timeline, sync_state, error_message,
           updated_at, last_synced_at, last_pushed_at
-        ) VALUES (?, ?, ?, ?, ?, COALESCE(?, '[]'), COALESCE(?, 1), ?, ?, ?, ?, ?)
-        ON CONFLICT(medium, douban_id) DO UPDATE SET
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, medium, douban_id) DO UPDATE SET
           status = excluded.status,
           rating = excluded.rating,
-          comment = CASE WHEN ? THEN excluded.comment ELSE user_items.comment END,
-          tags_json = CASE WHEN ? THEN excluded.tags_json ELSE user_items.tags_json END,
-          sync_to_timeline = CASE WHEN ? THEN excluded.sync_to_timeline ELSE user_items.sync_to_timeline END,
+          comment = excluded.comment,
+          tags_json = excluded.tags_json,
+          sync_to_timeline = excluded.sync_to_timeline,
           sync_state = excluded.sync_state,
           error_message = excluded.error_message,
           updated_at = excluded.updated_at,
@@ -311,41 +598,31 @@ export class AppDatabase {
           last_pushed_at = excluded.last_pushed_at
       `)
       .run(
+        userId,
         item.medium,
         item.doubanId,
         item.status,
         item.rating,
         item.comment ?? null,
-        tagsJson,
-        syncToTimeline,
+        JSON.stringify(item.tags ?? []),
+        item.syncToTimeline === false ? 0 : 1,
         item.syncState,
         item.errorMessage ?? null,
         updatedAt,
         item.lastSyncedAt ?? null,
-        item.lastPushedAt ?? null,
-        hasComment,
-        hasTags,
-        hasSyncToTimeline
+        item.lastPushedAt ?? null
       );
   }
 
-  listLibrary(input: {
-    medium: Medium;
-    status?: ShelfStatus;
-    page: number;
-    pageSize: number;
-  }): LibraryResponse {
-    const conditions = [`u.medium = ?`];
-    const params: Array<string | number> = [input.medium];
+  listLibrary(userId: string, input: { medium: Medium; status?: ShelfStatus; page: number; pageSize: number }): LibraryResponse {
+    const conditions = [`u.user_id = ?`, `u.medium = ?`];
+    const params: Array<string | number> = [userId, input.medium];
     if (input.status) {
       conditions.push(`u.status = ?`);
       params.push(input.status);
     }
-
     const where = conditions.join(" AND ");
-    const totalRow = this.db
-      .prepare(`SELECT COUNT(*) AS total FROM user_items u WHERE ${where}`)
-      .get(...params) as Row;
+    const totalRow = this.db.prepare(`SELECT COUNT(*) AS total FROM user_items u WHERE ${where}`).get(...params) as Row;
     const total = Number(totalRow.total ?? 0);
     const offset = (input.page - 1) * input.pageSize;
     const rows = this.db
@@ -375,8 +652,7 @@ export class AppDatabase {
           s.metadata_json AS subject_metadata_json,
           s.updated_at AS subject_updated_at
         FROM user_items u
-        JOIN subjects s
-          ON s.medium = u.medium AND s.douban_id = u.douban_id
+        JOIN subjects s ON s.medium = u.medium AND s.douban_id = u.douban_id
         WHERE ${where}
         ORDER BY u.updated_at DESC
         LIMIT ? OFFSET ?
@@ -393,14 +669,15 @@ export class AppDatabase {
     };
   }
 
-  getOverview(): OverviewResponse {
+  getOverview(userId: string): OverviewResponse {
     const totalsRows = this.db
       .prepare(`
         SELECT medium, status, COUNT(*) AS count
         FROM user_items
+        WHERE user_id = ?
         GROUP BY medium, status
       `)
-      .all() as Row[];
+      .all(userId) as Row[];
     const totals = totalsRows.map((row) => ({
       medium: row.medium as Medium,
       status: row.status as ShelfStatus,
@@ -434,27 +711,27 @@ export class AppDatabase {
           s.metadata_json AS subject_metadata_json,
           s.updated_at AS subject_updated_at
         FROM user_items u
-        JOIN subjects s
-          ON s.medium = u.medium AND s.douban_id = u.douban_id
+        JOIN subjects s ON s.medium = u.medium AND s.douban_id = u.douban_id
+        WHERE u.user_id = ?
         ORDER BY u.updated_at DESC
         LIMIT 8
       `)
-      .all() as Row[];
+      .all(userId) as Row[];
 
     const lastJobRow = this.db
-      .prepare(`SELECT * FROM sync_jobs ORDER BY started_at DESC LIMIT 1`)
-      .get() as Row | undefined;
+      .prepare(`SELECT * FROM sync_jobs WHERE user_id = ? ORDER BY started_at DESC LIMIT 1`)
+      .get(userId) as Row | undefined;
 
     return {
       totals,
       recentItems: recentRows.map(mapLibraryEntry),
       lastSyncJob: lastJobRow ? mapJob(lastJobRow) : null,
-      sessionStatus: this.getDoubanSessionStatus()
+      sessionStatus: this.getDoubanSessionStatus(userId)
     };
   }
 
-  getDoubanSessionStatus(): DoubanSessionStatus {
-    const row = this.db.prepare(`SELECT * FROM douban_session WHERE id = 1`).get() as Row | undefined;
+  getDoubanSessionStatus(userId: string): DoubanSessionStatus {
+    const row = this.db.prepare(`SELECT * FROM douban_sessions WHERE user_id = ?`).get(userId) as Row | undefined;
     if (!row) {
       return {
         status: "missing",
@@ -466,7 +743,6 @@ export class AppDatabase {
         lastError: null
       };
     }
-
     return {
       status: row.status as DoubanSessionStatus["status"],
       peopleId: (row.people_id as string | null) ?? null,
@@ -478,19 +754,19 @@ export class AppDatabase {
     };
   }
 
-  getDoubanCookie(): { cookie: string; peopleId: string | null } | null {
-    const row = this.db.prepare(`SELECT cookie, people_id FROM douban_session WHERE id = 1`).get() as Row | undefined;
+  getEncryptedDoubanCookie(userId: string): { cookieEncrypted: string; peopleId: string | null } | null {
+    const row = this.db.prepare(`SELECT cookie_encrypted, people_id FROM douban_sessions WHERE user_id = ?`).get(userId) as Row | undefined;
     if (!row) {
       return null;
     }
     return {
-      cookie: String(row.cookie),
+      cookieEncrypted: String(row.cookie_encrypted),
       peopleId: (row.people_id as string | null) ?? null
     };
   }
 
-  saveDoubanSession(input: {
-    cookie: string;
+  saveDoubanSession(userId: string, input: {
+    cookieEncrypted: string;
     peopleId: string | null;
     displayName?: string | null;
     avatarUrl?: string | null;
@@ -501,20 +777,22 @@ export class AppDatabase {
   }) {
     this.db
       .prepare(`
-        INSERT INTO douban_session (id, cookie, people_id, display_name, avatar_url, ip_location, status, last_checked_at, last_error)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          cookie = excluded.cookie,
+        INSERT INTO douban_sessions (
+          user_id, cookie_encrypted, people_id, display_name, avatar_url, ip_location, status, last_checked_at, last_error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          cookie_encrypted = excluded.cookie_encrypted,
           people_id = excluded.people_id,
-          display_name = COALESCE(excluded.display_name, douban_session.display_name),
-          avatar_url = COALESCE(excluded.avatar_url, douban_session.avatar_url),
-          ip_location = COALESCE(excluded.ip_location, douban_session.ip_location),
+          display_name = COALESCE(excluded.display_name, douban_sessions.display_name),
+          avatar_url = COALESCE(excluded.avatar_url, douban_sessions.avatar_url),
+          ip_location = COALESCE(excluded.ip_location, douban_sessions.ip_location),
           status = excluded.status,
           last_checked_at = excluded.last_checked_at,
           last_error = excluded.last_error
       `)
       .run(
-        input.cookie,
+        userId,
+        input.cookieEncrypted,
         input.peopleId,
         input.displayName ?? null,
         input.avatarUrl ?? null,
@@ -525,18 +803,14 @@ export class AppDatabase {
       );
   }
 
-  updateDoubanSessionStatus(status: DoubanSessionStatus["status"], errorMessage: string | null) {
+  updateDoubanSessionStatus(userId: string, status: DoubanSessionStatus["status"], errorMessage: string | null) {
     this.db
       .prepare(`
-        UPDATE douban_session
+        UPDATE douban_sessions
         SET status = ?, last_error = ?, last_checked_at = ?
-        WHERE id = 1
+        WHERE user_id = ?
       `)
-      .run(status, errorMessage, nowIso());
-  }
-
-  clearDoubanSession() {
-    this.db.prepare(`DELETE FROM douban_session WHERE id = 1`).run();
+      .run(status, errorMessage, nowIso(), userId);
   }
 
   saveRankingSnapshot(medium: Medium, board: RankingBoardConfig, items: RankingItem[], fetchedAt = nowIso()) {
@@ -553,9 +827,7 @@ export class AppDatabase {
   }
 
   getRankingSnapshot(medium: Medium, board: RankingBoardConfig): RankingResponse | null {
-    const row = this.db
-      .prepare(`SELECT * FROM ranking_snapshots WHERE medium = ? AND board_key = ?`)
-      .get(medium, board.key) as Row | undefined;
+    const row = this.db.prepare(`SELECT * FROM ranking_snapshots WHERE medium = ? AND board_key = ?`).get(medium, board.key) as Row | undefined;
     if (!row) {
       return null;
     }
@@ -567,36 +839,42 @@ export class AppDatabase {
     };
   }
 
-  saveTimelineSnapshot(scope: TimelineScope, items: TimelineItem[], fetchedAt = nowIso()) {
+  saveTimelineSnapshot(userId: string, scope: TimelineScope, items: TimelineItem[], fetchedAt = nowIso()) {
     this.db
       .prepare(`
-        INSERT INTO timeline_snapshots (scope, items_json, fetched_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(scope) DO UPDATE SET
+        INSERT INTO timeline_snapshots (user_id, scope, items_json, fetched_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, scope) DO UPDATE SET
           items_json = excluded.items_json,
           fetched_at = excluded.fetched_at
       `)
-      .run(scope, JSON.stringify(items), fetchedAt);
+      .run(userId, scope, JSON.stringify(items), fetchedAt);
   }
 
-  getTimelineSnapshot(scope: TimelineScope): TimelineResponse | null {
-    const row = this.db
-      .prepare(`SELECT * FROM timeline_snapshots WHERE scope = ?`)
-      .get(scope) as Row | undefined;
+  getTimelineSnapshot(userId: string, scope: TimelineScope): TimelineResponse | null {
+    const row = this.db.prepare(`SELECT * FROM timeline_snapshots WHERE user_id = ? AND scope = ?`).get(userId, scope) as Row | undefined;
     if (!row) {
       return null;
     }
+    const items = parseJson<TimelineItem[]>(row.items_json, []).map((item) => ({
+      ...item,
+      photoUrls: Array.isArray(item.photoUrls) ? item.photoUrls : []
+    }));
     return {
       scope,
-      items: parseJson<TimelineItem[]>(row.items_json, []),
+      start: 0,
+      items,
+      nextStart: items.length > 0 ? items.length : null,
+      hasMore: items.length >= 30,
       fetchedAt: String(row.fetched_at),
       stale: false
     };
   }
 
-  insertSyncJob(type: SyncJobType, payload: Record<string, unknown> = {}): SyncJobRecord {
+  insertSyncJob(userId: string, type: SyncJobType, payload: Record<string, unknown> = {}): SyncJobRecord {
     const job: SyncJobRecord = {
       id: randomUUID(),
+      userId,
       type,
       status: "queued",
       payload,
@@ -606,29 +884,31 @@ export class AppDatabase {
     };
     this.db
       .prepare(`
-        INSERT INTO sync_jobs (id, type, status, payload_json, started_at, finished_at, error_message)
-        VALUES (?, ?, ?, ?, ?, NULL, NULL)
+        INSERT INTO sync_jobs (id, user_id, type, status, payload_json, started_at, finished_at, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
-      .run(job.id, job.type, job.status, JSON.stringify(job.payload), job.startedAt);
+      .run(job.id, userId, job.type, job.status, JSON.stringify(job.payload), job.startedAt);
     return job;
   }
 
-  getSyncJob(jobId: string): SyncJobRecord | null {
-    const row = this.db.prepare(`SELECT * FROM sync_jobs WHERE id = ?`).get(jobId) as Row | undefined;
+  getSyncJob(userId: string, jobId: string): SyncJobRecord | null {
+    const row = this.db.prepare(`SELECT * FROM sync_jobs WHERE id = ? AND user_id = ?`).get(jobId, userId) as Row | undefined;
     return row ? mapJob(row) : null;
   }
 
-  countOpenSyncJobs() {
+  countOpenSyncJobs(userId?: string) {
+    if (!userId) {
+      const row = this.db.prepare(`SELECT COUNT(*) AS total FROM sync_jobs WHERE status IN ('queued', 'running')`).get() as Row;
+      return Number(row.total ?? 0);
+    }
     const row = this.db
-      .prepare(`SELECT COUNT(*) AS total FROM sync_jobs WHERE status IN ('queued', 'running')`)
-      .get() as Row;
+      .prepare(`SELECT COUNT(*) AS total FROM sync_jobs WHERE user_id = ? AND status IN ('queued', 'running')`)
+      .get(userId) as Row;
     return Number(row.total ?? 0);
   }
 
   claimNextQueuedJob(): SyncJobRecord | null {
-    const row = this.db
-      .prepare(`SELECT * FROM sync_jobs WHERE status = 'queued' ORDER BY started_at ASC LIMIT 1`)
-      .get() as Row | undefined;
+    const row = this.db.prepare(`SELECT * FROM sync_jobs WHERE status = 'queued' ORDER BY started_at ASC LIMIT 1`).get() as Row | undefined;
     if (!row) {
       return null;
     }
@@ -649,21 +929,21 @@ export class AppDatabase {
       .run(status, status === "running" || status === "queued" ? null : nowIso(), errorMessage ?? null, jobId);
   }
 
-  addSyncEvent(level: SyncEventRecord["level"], message: string, context: Record<string, unknown> = {}) {
+  addSyncEvent(userId: string, level: SyncEventRecord["level"], message: string, context: Record<string, unknown> = {}) {
     this.db
       .prepare(`
-        INSERT INTO sync_events (level, message, context_json, created_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO sync_events (user_id, level, message, context_json, created_at)
+        VALUES (?, ?, ?, ?, ?)
       `)
-      .run(level, message, JSON.stringify(context), nowIso());
+      .run(userId, level, message, JSON.stringify(context), nowIso());
   }
 
-  listSyncEvents(limit = 50): SyncEventRecord[] {
+  listSyncEvents(userId: string, limit = 50): SyncEventRecord[] {
     const rows = this.db
       .prepare(`
-        SELECT * FROM sync_events ORDER BY created_at DESC LIMIT ?
+        SELECT * FROM sync_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
       `)
-      .all(limit) as Row[];
+      .all(userId, limit) as Row[];
     return rows.map((row) => ({
       id: Number(row.id),
       level: row.level as SyncEventRecord["level"],

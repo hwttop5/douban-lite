@@ -62,6 +62,31 @@ export interface SubjectComment {
   votes: number | null;
 }
 
+export interface SubjectStaffMember {
+  name: string;
+  role: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+}
+
+export interface SubjectMediaItem {
+  type: "video" | "image";
+  title: string | null;
+  thumbnailUrl: string | null;
+  url: string;
+}
+
+export interface SubjectMediaGroup {
+  videos: SubjectMediaItem[];
+  images: SubjectMediaItem[];
+}
+
+export interface SubjectSectionLink {
+  key: string;
+  label: string;
+  url: string;
+}
+
 export interface UserItemRecord {
   medium: Medium;
   doubanId: string;
@@ -77,12 +102,23 @@ export interface UserItemRecord {
   lastPushedAt: string | null;
 }
 
+export interface AppUser {
+  id: string;
+  peopleId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  ipLocation?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LibraryEntry extends UserItemRecord {
   subject: SubjectRecord;
 }
 
 export interface SyncJobRecord {
   id: string;
+  userId: string;
   type: SyncJobType;
   status: SyncJobStatus;
   payload: Record<string, unknown>;
@@ -107,6 +143,17 @@ export interface DoubanSessionStatus {
   ipLocation?: string | null;
   lastCheckedAt: string | null;
   lastError: string | null;
+}
+
+export interface AuthMeResponse {
+  authenticated: boolean;
+  user: AppUser | null;
+  sessionStatus: DoubanSessionStatus;
+}
+
+export interface DoubanLoginResponse {
+  user: AppUser;
+  sessionStatus: DoubanSessionStatus;
 }
 
 export interface OverviewTotal {
@@ -142,6 +189,12 @@ export interface SubjectDetailResponse {
   subject: SubjectRecord;
   userItem: UserItemRecord | null;
   comments: SubjectComment[];
+  staff: SubjectStaffMember[];
+  media: SubjectMediaGroup;
+  trackList: string[];
+  tableOfContents: string[];
+  relatedSubjects: SubjectRecord[];
+  sectionLinks: SubjectSectionLink[];
 }
 
 export interface SubjectCommentsResponse {
@@ -191,12 +244,16 @@ export interface TimelineItem {
   subjectTitle: string | null;
   subjectUrl: string | null;
   subjectCoverUrl: string | null;
+  photoUrls: string[];
   engagements: TimelineEngagement[];
 }
 
 export interface TimelineResponse {
   scope: TimelineScope;
+  start: number;
   items: TimelineItem[];
+  nextStart: number | null;
+  hasMore: boolean;
   fetchedAt: string;
   stale: boolean;
 }
@@ -205,7 +262,7 @@ export const boardCatalog: Record<Medium, RankingBoardConfig[]> = {
   movie: [
     { key: "hot-movies", name: "热门电影", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门" },
     { key: "hot-tv", name: "热门电视剧", path: "https://movie.douban.com/j/search_subjects", sourceType: "movie_hot", tag: "热门电视剧" },
-    { key: "top250", name: "TOP250", path: "https://movie.douban.com/top250", sourceType: "html_list" }
+    { key: "top250", name: "TOP250", path: "https://movie.douban.com/top250", sourceType: "html_list", maxPages: 10 }
   ],
   music: [
     { key: "weekly-artists", name: "本周流行", path: "https://music.douban.com/", sourceType: "homepage_section", sectionTitle: "本周流行音乐人" },
@@ -215,7 +272,7 @@ export const boardCatalog: Record<Medium, RankingBoardConfig[]> = {
   book: [
     { key: "new-books", name: "新书速递", path: "https://book.douban.com/latest", sourceType: "html_list" },
     { key: "monthly-hot", name: "热门图书榜", path: "https://book.douban.com/chart?subcat=all", sourceType: "html_list" },
-    { key: "top250", name: "TOP250", path: "https://book.douban.com/top250", sourceType: "html_list" }
+    { key: "top250", name: "TOP250", path: "https://book.douban.com/top250", sourceType: "html_list", maxPages: 10 }
   ],
   game: [
     { key: "top500", name: "豆瓣游戏TOP500", path: "https://www.douban.com/doulist/122952913/", sourceType: "doulist", maxPages: 20 }
@@ -229,7 +286,8 @@ export const syncJobTypeSchema = z.enum(syncJobTypes);
 export const timelineScopeSchema = z.enum(timelineScopes);
 
 export const importDoubanSessionSchema = z.object({
-  cookie: z.string().min(10, "cookie looks too short")
+  cookie: z.string().min(10, "cookie looks too short"),
+  peopleId: z.string().trim().min(1).optional()
 });
 
 export const updateLibraryStateSchema = z.object({

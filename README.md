@@ -1,70 +1,95 @@
 # douban-lite
 
-`douban-lite` 是一个轻量的、干净整洁的、没有多余功能的豆瓣 PWA 应用。它面向单用户、自托管和移动端使用场景，把你真正会反复打开的几件事收拢到一起：搜索条目、看榜单、看动态、管理自己的标记与评分，并把同步结果保存到本地 SQLite。
+`douban-lite` 是一个轻量的豆瓣 PWA，适合自托管使用。一个部署实例可以支持多人使用，但每个人都应导入自己的豆瓣 Cookie，彼此的收藏、评分、标签、短评、动态和同步任务会分开存储。
 
-## 功能概览
+> 提醒
+> `douban-lite` 需要接收真实登录态的豆瓣 Cookie，并代替用户发起登录后的豆瓣请求。这类行为可能触发豆瓣风控，例如登录校验、Cookie 失效、临时限流，或账号侧的安全验证。最稳妥的使用方式是自己部署、自己使用。不要把它当成公开 SaaS，也不要让别人把高权限的真实豆瓣 Cookie 粘贴到他们无法控制的第三方实例里。
 
-- 支持 `电影 / 音乐 / 图书 / 游戏` 四类条目。
-- 支持豆瓣搜索，直接进入条目详情页查看简介、短评、公开评分和个人状态。
-- 支持个人收藏状态管理，包括 `想看 / 在看 / 看过`、`想读 / 在读 / 读过`、`想玩 / 在玩 / 玩过` 等标记。
-- 支持在标记时填写短评、选择标签、决定是否同步到豆瓣动态，并进入本地待写回队列。
-- 支持榜单浏览，按媒介查看热门榜单内容并快速跳转到条目详情。
-- 支持动态流，聚合自己和关注的人最近的标记内容。
-- 支持同步状态反馈，区分 `已同步`、`待写回`、`需处理`，方便追踪本地与豆瓣之间的状态差异。
-- 支持导入豆瓣 Cookie 作为登录态，用于抓取个人数据和写回标记。
-- 支持 PWA 安装，适合放到手机桌面作为随手可开的个人豆瓣客户端。
+## 功能说明
 
-## 适用场景
+- 支持 `电影`、`音乐`、`图书`、`游戏`
+- 支持搜索豆瓣条目并进入详情页
+- 支持保存个人状态，包括收藏状态、评分、短评、标签和是否同步到动态
+- 支持把每个用户自己的豆瓣收藏同步到本地 SQLite
+- 支持查看当前登录用户的豆瓣动态
+- 支持共享公共缓存，例如条目数据和榜单快照
+- 支持作为 PWA 安装到手机和桌面端
 
-- 想要一个比豆瓣官方页面更轻、更聚焦的个人使用入口。
-- 想把常看的收藏、评分、榜单和动态集中到一个移动端友好的界面里。
-- 想自托管自己的豆瓣同步镜像，避免每次都回到原始网页里查找。
+## 页面截图
 
-## 技术结构
+以下截图基于本地页面渲染整理。
 
-- `apps/web`: React + Vite PWA 前端
-- `apps/api`: Express API、豆瓣页面解析、同步任务和 SQLite 存储
-- `packages/shared`: 前后端共享类型、枚举和请求 schema
+- 功能总览 GIF 覆盖 `榜单 / 搜索 / 详情 / 我的 / 动态 / 设置`
+- `Pad` 和手机端同样提供了整套功能页轮播
+- 需要登录态的页面使用本地演示数据展示界面结构
+- 所有截图均在等待 10 秒、确认主要内容完成加载后截取
 
-前端默认通过同源 `/api` 调用后端。后端负责抓取豆瓣页面、解析 HTML、入库、排队写回和同步状态管理。
+### 功能总览
 
-## 环境要求
+#### PC 端
+
+![douban-lite desktop feature tour](docs/screenshots/feature-tour.gif)
+
+#### Pad 端
+
+![douban-lite tablet feature tour](docs/screenshots/feature-tour-tablet.gif)
+
+#### 手机端
+
+![douban-lite mobile feature tour](docs/screenshots/feature-tour-mobile.gif)
+
+
+## 多用户模型
+
+- v1 没有单独的 douban-lite 用户名和密码体系
+- 用户通过导入自己的豆瓣 Cookie 登录
+- 后端会校验 Cookie，解析对应的豆瓣 `peopleId`，创建或更新本地用户，并写入 httpOnly 会话 Cookie
+- 后续请求使用的是 douban-lite 自己的会话 Cookie，而不是浏览器里原始的豆瓣 Cookie
+
+### 数据隔离
+
+- 按用户隔离的数据：
+  `user_items`、`douban_sessions`、`timeline_snapshots`、`sync_jobs`、`sync_events`
+- 所有用户共享的数据：
+  `subjects`、`ranking_snapshots`
+
+## 本地开发
+
+环境要求：
 
 - `Node.js >= 24`
 - `npm >= 11`
 
-项目使用 `node:sqlite`，低版本 Node 无法运行后端。
-
-## 本地开发
+安装并启动：
 
 ```bash
 npm install
 npm run dev
 ```
 
-默认情况下：
+默认地址：
 
 - Web: `http://localhost:5173`
 - API: `http://localhost:8787`
 
-Vite 开发服务器会把 `/api` 和 `/health` 代理到 API 服务，所以前端代码默认使用同源请求。
+Vite 开发服务器会把 `/api` 和 `/health` 代理到 API 服务。
 
 ## 环境变量
 
-项目不会自动加载根目录 `.env`，请把变量注入到 shell、进程管理器或部署平台。
+项目不会自动加载根目录 `.env` 文件，请通过 shell、进程管理器或部署平台注入变量。
 
-关键变量：
-
-- `PORT`: API 监听端口，默认 `8787`
-- `WEB_ORIGIN`: 独立前端域名时使用；同源部署可留空
-- `DATA_DIR`: SQLite 数据目录
-- `WEB_DIST_DIR`: 生产环境前端构建目录，默认 `./apps/web/dist`
-- `DOUBAN_PUBLIC_BASE_URL`: 豆瓣移动端公开页面地址
-- `DOUBAN_WEB_BASE_URL`: 豆瓣 Web 页面地址
-- `SYNC_INTERVAL_HOURS`: 自动同步间隔
-- `DISABLE_AUTO_SYNC`: 设为 `true` 可关闭自动同步
-- `VITE_API_BASE_URL`: 前端 API 地址；留空时使用同源 `/api`
-- `VITE_API_PROXY_TARGET`: 本地 Vite 代理目标，默认 `http://localhost:8787`
+- `PORT`：API 端口，默认 `8787`
+- `WEB_ORIGIN`：独立前端域名场景下用于配置 CORS
+- `DATA_DIR`：SQLite 数据目录
+- `WEB_DIST_DIR`：前端构建目录，默认 `./apps/web/dist`
+- `APP_SECRET`：生产环境必填，用于 douban-lite 会话签名和豆瓣 Cookie 加密
+- `SESSION_TTL_DAYS`：douban-lite 会话有效期，默认 `30`
+- `DOUBAN_PUBLIC_BASE_URL`：豆瓣公开 / 移动端页面基地址
+- `DOUBAN_WEB_BASE_URL`：豆瓣登录态 Web 页面基地址
+- `SYNC_INTERVAL_HOURS`：定时同步间隔小时数
+- `DISABLE_AUTO_SYNC`：设为 `true` 时关闭定时同步
+- `VITE_API_BASE_URL`：前端 API 地址，留空时使用同源 `/api`
+- `VITE_API_PROXY_TARGET`：本地 Vite 代理目标，默认 `http://localhost:8787`
 
 ## 常用命令
 
@@ -75,90 +100,58 @@ npm run build
 npm start
 ```
 
-`npm start` 需要先执行 `npm run build`，它会启动 API 并托管 `apps/web/dist`，适合本地生产冒烟和单服务部署。
+`npm start` 会在 `npm run build` 之后由 API 进程托管前端构建产物。
 
-## 手机端使用说明
+## 用户如何登录
 
-要把 PWA 添加到桌面，部署地址需要是 `https`，本地 `localhost` 仅适合开发调试。
+1. 打开部署后的应用。
+2. 进入 Settings 页面。
+3. 粘贴已登录豆瓣浏览器里的 Cookie，例如 `dbcl2=...; ck=...;`。
+4. 后端会校验 Cookie，并把当前会话绑定到对应豆瓣账号的 `peopleId`。
+5. 浏览器收到 douban-lite 的会话 Cookie 后，会在当前设备上保持登录，直到过期或主动退出。
 
-### Android
+退出登录只会删除当前浏览器里的 douban-lite 会话 Cookie，不会删除服务端存储的该用户豆瓣会话记录。
 
-推荐使用 Chrome 或 Edge：
+## 如何获取 Cookie / 在 PWA 中重新登录
 
-1. 打开应用部署地址。
-2. 等页面首次加载完成，确认底部导航和页面内容都正常。
-3. 点击浏览器右上角菜单。
-4. 选择 `添加到主屏幕`、`安装应用` 或 `Install app`。
-5. 确认名称后添加到桌面。
-6. 以后可以像普通 App 一样从桌面直接打开。
+1. 在桌面 Chrome 或 Edge 中打开任一已登录的豆瓣页面。
+2. 按 `F12` 打开开发者工具，进入 `Application` 或 `Storage`，再打开 `Cookies` 下的 `douban.com`。
+3. 把需要的 Cookie 拼成 `name=value; name2=value2;` 的格式，例如 `dbcl2=...; ck=...;`。
+4. 回到 douban-lite 的 `Settings` 页面，粘贴 Cookie，点击 `导入并登录`。
+5. 如果后续会话失效、同步失败或豆瓣要求重新验证，重新回到浏览器复制最新 Cookie，再次导入即可。
 
-如果浏览器没有立即出现安装入口：
+注意事项：
 
-1. 先刷新一次页面。
-2. 确认站点证书正常且不是 `http`。
-3. 再次打开菜单查找安装入口。
+- PWA 不会直接继承系统浏览器里的豆瓣登录态，因此安装到桌面或手机主屏后仍需要手动导入一次 Cookie。
+- 只应在你自己信任的自部署实例中粘贴 Cookie。
+- 导入成功后，浏览器保存的是 douban-lite 自己的 httpOnly 会话，不需要长期保留原始豆瓣 Cookie。
 
-### iPhone / iPad
+## 部署说明
 
-推荐使用 Safari：
+仓库内已经包含 `render.yaml`，可用于部署 Node Web Service。
 
-1. 打开应用部署地址。
-2. 点击底部分享按钮。
-3. 向下滑动操作列表。
-4. 选择 `添加到主屏幕`。
-5. 确认名称后点击右上角 `添加`。
-6. 添加完成后可从桌面以独立窗口方式打开。
+重要限制：
 
-注意：
+- SQLite 必须放在持久化存储上，才适合真实的多用户使用
+- Render Free 的本地文件系统不适合长期保存共享数据
+- 生产环境必须启用 HTTPS
+- 生产环境必须配置 `APP_SECRET`
 
-- iOS 不会显示 Android 那种“安装应用”弹窗，需要手动通过 Safari 分享菜单添加。
-- 若使用第三方浏览器，通常仍然建议回到 Safari 完成添加。
+如果要给多人共享使用，建议：
 
-## 发布前检查
+- 选择带持久化磁盘的托管方案，或者后续迁移到外部数据库
+- 只把访问地址分享给你信任的人
+- 能自己部署自己用，就尽量不要做成公开或半公开部署
 
-```bash
-git status --short
-npm run typecheck
-npm test
-npm run build
-```
+## 安全说明
 
-请不要提交真实豆瓣 Cookie、SQLite 数据库、线上密钥或包含敏感信息的截图。
-
-## Render 部署
-
-仓库包含 `render.yaml`，可用于通过 Render Blueprint 创建一个 Node Web Service。
-
-默认配置：
-
-- `plan: free`
-- `buildCommand: npm ci && npm run build`
-- `startCommand: npm start`
-- `healthCheckPath: /health`
-
-上线步骤：
-
-1. 将代码推送到 GitHub。
-2. 在 Render 中使用 Blueprint 导入仓库。
-3. 部署完成后访问 `/health`，确认返回 `status: ok`。
-
-需要注意：
-
-- Render Free 会休眠并有冷启动。
-- 当前项目默认使用本地 SQLite，实例重启、迁移或重新部署后可能丢失数据。
-- 如果要长期稳定使用，建议升级到支持持久化磁盘的方案，或者把存储迁移到外部数据库。
-
-参考文档：
-
-- [Render Free](https://render.com/docs/free)
-- [Render Web Services](https://render.com/docs/web-services)
-- [Render Disks](https://render.com/docs/disks)
-
-## 安全提示
-
-- 豆瓣 Cookie 等同于登录态，不要提交到 GitHub。
-- 公共预览环境不建议导入长期使用的真实账号 Cookie。
-- SQLite 文件包含个人同步数据，备份和迁移时应按敏感数据处理。
+- 最安全的方式仍然是自己部署、自己使用，部署者和豆瓣账号所有者是同一个人时风险最低
+- 不要把自己的豆瓣 Cookie 粘贴到你无法控制的第三方部署实例
+- 登录后抓取和同步行为可能触发豆瓣风控、会话失效或额外验证
+- 豆瓣 Cookie 本质上就是登录凭证，必须按敏感信息处理
+- 豆瓣 Cookie 在服务端会通过 `APP_SECRET` 加密存储
+- douban-lite 使用 httpOnly 会话 Cookie，因此前端在登录后不需要继续持有原始豆瓣 Cookie
+- 公共或共享部署依然属于敏感环境，因为用户导入的是真实豆瓣登录态
 
 ## License
 

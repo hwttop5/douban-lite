@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import type { ShelfStatus, SubjectComment, UpdateLibraryStateInput } from "../../../../packages/shared/src";
+import type { ShelfStatus, SubjectComment, SubjectMediaItem, SubjectSectionLink, UpdateLibraryStateInput } from "../../../../packages/shared/src";
 import { mediumLabels, mediumSchema, statusLabels } from "../../../../packages/shared/src";
-import { getDoubanSessionStatus, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
+import { getAuthMe, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
+import { CommentSkeletonList, DetailPageSkeleton, LoadingButtonLabel, LoadingInline } from "../components/loading-state";
+import { SubjectCard } from "../components/subject-card";
+import { useAutoLoadMore } from "../hooks/use-auto-load-more";
 
 const tagSuggestions = ["温情", "治愈", "经典", "想再看", "剧情", "家庭", "冒险", "音乐", "文学", "独立", "动作", "怀旧"];
 
@@ -46,6 +49,37 @@ function scoreFromAverage(average: number | null) {
   return average ? Math.round(average / 2) : null;
 }
 
+function sectionLinkMap(links: SubjectSectionLink[] | undefined) {
+  return new Map((links ?? []).map((item) => [item.key, item]));
+}
+
+function detailSectionTitle(medium: ReturnType<typeof mediumSchema.parse>) {
+  if (medium === "music") {
+    return "曲目";
+  }
+  if (medium === "book") {
+    return "目录";
+  }
+  return "内容扩展";
+}
+
+function relatedTitle(medium: ReturnType<typeof mediumSchema.parse>) {
+  if (medium === "movie") {
+    return "喜欢这部电影的人也喜欢";
+  }
+  if (medium === "music") {
+    return "喜欢听此专辑的人也喜欢";
+  }
+  if (medium === "book") {
+    return "喜欢读此书的人也喜欢";
+  }
+  return "喜欢此游戏的人也喜欢";
+}
+
+function renderMediaLabel(item: SubjectMediaItem) {
+  return item.type === "video" ? "视频" : "图片";
+}
+
 export function SubjectDetailPage() {
   const queryClient = useQueryClient();
   const params = useParams();
@@ -70,8 +104,9 @@ export function SubjectDetailPage() {
     queryFn: () => getSubjectDetail(medium, doubanId)
   });
   const sessionQuery = useQuery({
-    queryKey: ["douban-session-status"],
-    queryFn: getDoubanSessionStatus
+    queryKey: ["auth-me"],
+    queryFn: getAuthMe,
+    retry: false
   });
 
   const commentsQuery = useQuery({
@@ -115,12 +150,29 @@ export function SubjectDetailPage() {
   const comments: SubjectComment[] = loadedComments.length > 0 ? loadedComments : initialComments;
   const nextStart = commentsQuery.data?.nextStart ?? (comments.length > 0 ? comments.length : null);
   const hasMore = commentsQuery.data?.hasMore ?? comments.length > 0;
+  const commentsAutoLoadRef = useAutoLoadMore({
+    enabled: comments.length > 0 && nextStart != null,
+    hasMore: hasMore && nextStart != null,
+    isLoading: loadMoreMutation.isPending,
+    onLoadMore: () => {
+      if (nextStart != null) {
+        loadMoreMutation.mutate(nextStart);
+      }
+    }
+  });
   const coverUrl = proxiedImageUrl(subject?.coverUrl);
-  const hasDoubanSession = sessionQuery.data?.status === "valid";
+  const hasDoubanSession = sessionQuery.data?.authenticated && sessionQuery.data?.sessionStatus.status === "valid";
   const sessionPending = sessionQuery.isPending;
+  const showCommentSkeleton = commentsQuery.isFetching && comments.length === 0;
   const visibleUserItem = hasDoubanSession ? userItem : null;
   const currentStatus = visibleUserItem?.status ?? "wish";
   const currentRating = visibleUserItem?.rating ?? null;
+  const sectionLinks = sectionLinkMap(detailQuery.data?.sectionLinks);
+  const staff = detailQuery.data?.staff ?? [];
+  const media = detailQuery.data?.media ?? { videos: [], images: [] };
+  const trackList = detailQuery.data?.trackList ?? [];
+  const tableOfContents = detailQuery.data?.tableOfContents ?? [];
+  const relatedSubjects = detailQuery.data?.relatedSubjects ?? [];
   const openMarkDialog = (input: { status: ShelfStatus; rating: number | null }) => {
     if (!hasDoubanSession) {
       setLoginMessage("请先登录豆瓣后再标记和评分。");
@@ -187,14 +239,7 @@ export function SubjectDetailPage() {
   };
 
   if (detailQuery.isPending) {
-    return (
-      <div className="page">
-        <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
-          <span>‹</span>
-        </button>
-        <p className="empty-state">载入条目详情中...</p>
-      </div>
-    );
+    return <DetailPageSkeleton />;
   }
 
   if (detailQuery.error || !subject) {
@@ -278,6 +323,12 @@ export function SubjectDetailPage() {
                 </button>
               ))}
             </div>
+            {visibleUserItem?.comment ? (
+              <div className="detail-my-rating__comment">
+                <span>我的短评</span>
+                <p>{visibleUserItem.comment}</p>
+              </div>
+            ) : null}
           </div>
         </div>
         <p className="detail-current-state">
@@ -303,14 +354,129 @@ export function SubjectDetailPage() {
         </section>
       ) : null}
 
+      {staff.length > 0 ? (
+        <section className="detail-section">
+          <div className="detail-section__header">
+            <h2>职员</h2>
+            {sectionLinks.get("staff") ? (
+              <a href={sectionLinks.get("staff")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
+                查看全部
+              </a>
+            ) : null}
+          </div>
+          <div className="detail-staff-grid">
+            {staff.map((member) => {
+              const avatarUrl = proxiedImageUrl(member.avatarUrl);
+              return (
+                <a
+                  key={`${member.name}-${member.role ?? ""}`}
+                  className="detail-staff-card"
+                  href={member.profileUrl ?? "#"}
+                  target={member.profileUrl ? "_blank" : undefined}
+                  rel={member.profileUrl ? "noreferrer" : undefined}
+                >
+                  <span className="detail-staff-card__avatar">
+                    {avatarUrl ? <img src={avatarUrl} alt={member.name} loading="lazy" /> : <span>{member.name.slice(0, 1)}</span>}
+                  </span>
+                  <strong>{member.name}</strong>
+                  {member.role ? <span>{member.role}</span> : null}
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {trackList.length > 0 ? (
+        <section className="detail-section">
+          <div className="detail-section__header">
+            <h2>{detailSectionTitle(medium)}</h2>
+          </div>
+          <ol className="detail-list detail-list--ordered">
+            {trackList.map((track) => (
+              <li key={track}>{track}</li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {tableOfContents.length > 0 ? (
+        <section className="detail-section">
+          <div className="detail-section__header">
+            <h2>{detailSectionTitle(medium)}</h2>
+          </div>
+          <ul className="detail-list">
+            {tableOfContents.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {media.videos.length > 0 || media.images.length > 0 ? (
+        <section className="detail-section">
+          <div className="detail-section__header">
+            <h2>视频 / 图片</h2>
+            <div className="detail-section__actions">
+              {sectionLinks.get("videos") ? (
+                <a href={sectionLinks.get("videos")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
+                  全部视频
+                </a>
+              ) : null}
+              {sectionLinks.get("images") ? (
+                <a href={sectionLinks.get("images")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
+                  全部图片
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="detail-media-grid">
+            {[...media.videos, ...media.images].map((item) => {
+              const thumbnailUrl = proxiedImageUrl(item.thumbnailUrl);
+              return (
+                <a key={item.url} href={item.url} target="_blank" rel="noreferrer" className="detail-media-card">
+                  <span className="detail-media-card__thumb">
+                    {thumbnailUrl ? <img src={thumbnailUrl} alt={item.title ?? renderMediaLabel(item)} loading="lazy" /> : <span>{renderMediaLabel(item)}</span>}
+                  </span>
+                  <span className="detail-media-card__meta">
+                    <strong>{item.title ?? renderMediaLabel(item)}</strong>
+                    <span>{renderMediaLabel(item)}</span>
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {relatedSubjects.length > 0 ? (
+        <section className="detail-section">
+          <div className="detail-section__header">
+            <h2>{relatedTitle(medium)}</h2>
+            {sectionLinks.get("related") ? (
+              <a href={sectionLinks.get("related")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
+                查看全部
+              </a>
+            ) : null}
+          </div>
+          <div className="detail-related-grid">
+            {relatedSubjects.map((item) => (
+              <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={medium} subject={item} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="detail-section comments-panel">
         <div className="comments-panel__header">
           <div>
             <h2>短评</h2>
           </div>
-          {commentsQuery.isFetching ? <span className="pill pill--info">读取中</span> : null}
+          {commentsQuery.isFetching ? <LoadingInline label="正在整理短评" tone="soft" /> : null}
         </div>
-        {comments.length > 0 ? (
+        {showCommentSkeleton ? (
+          <CommentSkeletonList count={4} />
+        ) : comments.length > 0 ? (
           <div className="comment-list-lite">
             {comments.map((comment, index) => (
               <article className="comment-card" key={comment.id ?? `${comment.author}-${index}`}>
@@ -334,11 +500,9 @@ export function SubjectDetailPage() {
           <p className="empty-state">暂时没有解析到公开短评。</p>
         )}
         {loadMoreMutation.error ? <p className="form-error">{loadMoreMutation.error.message}</p> : null}
-        {hasMore && nextStart != null ? (
-          <button className="secondary-button comments-more-button" type="button" disabled={loadMoreMutation.isPending} onClick={() => loadMoreMutation.mutate(nextStart)}>
-            {loadMoreMutation.isPending ? "加载中..." : "查看更多"}
-          </button>
-        ) : comments.length > 0 ? (
+        {hasMore && nextStart != null ? <div ref={commentsAutoLoadRef} className="auto-load-sentinel" aria-hidden="true" /> : null}
+        {loadMoreMutation.isPending ? <p className="auto-load-status"><LoadingInline label="正在补充更多短评" tone="soft" /></p> : null}
+        {!hasMore && comments.length > 0 ? (
           <p className="empty-state">没有更多短评了。</p>
         ) : null}
       </section>
@@ -352,7 +516,7 @@ export function SubjectDetailPage() {
               </button>
               <h2 id="mark-dialog-title">{subject.title}</h2>
               <button type="button" onClick={submitMarkDialog} disabled={mutation.isPending}>
-                {mutation.isPending ? "保存中" : "确定"}
+                {mutation.isPending ? <LoadingButtonLabel label="保存中" /> : "确定"}
               </button>
             </header>
 

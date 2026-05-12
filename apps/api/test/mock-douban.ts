@@ -85,6 +85,13 @@ const subjects: Record<Medium, MockSubject> = {
   }
 };
 
+const relatedSubjects: Record<Medium, { doubanId: string; title: string; cover: string }> = {
+  movie: { doubanId: "1292720", title: "Forrest Gump", cover: "/images/movie-related.jpg" },
+  book: { doubanId: "1003078", title: "Related Book", cover: "/images/book-related.jpg" },
+  music: { doubanId: "20427949", title: "Related Album", cover: "/images/music-related.jpg" },
+  game: { doubanId: "26791492", title: "Related Game", cover: "/images/game-related.jpg" }
+};
+
 function interestValue(status: ShelfStatus) {
   switch (status) {
     case "wish":
@@ -105,6 +112,61 @@ function renderDetail(subject: MockSubject, state: MockRemoteState) {
     subject.medium === "game"
       ? `/game/${subject.doubanId}/interest`
       : `/${subject.medium}/subject/${subject.doubanId}/interest`;
+  const related = relatedSubjects[subject.medium];
+  const relatedHref = subject.medium === "game" ? `/game/${related.doubanId}/` : `/${subject.medium}/subject/${related.doubanId}/`;
+  const relatedSection = `
+      <div id="db-rec-section">
+        <h2>People also liked</h2>
+        <div class="content clearfix">
+          <dl>
+            <dt><a href="${relatedHref}"><img src="${related.cover}" alt="${related.title}" /></a></dt>
+            <dd><a href="${relatedHref}">${related.title}</a><span class="subject-rate">8.8</span></dd>
+          </dl>
+        </div>
+      </div>`;
+  const movieExtras =
+    subject.medium === "movie"
+      ? `
+      <div id="celebrities">
+        <h2><span>Cast and crew</span><span class="pl">(<a href="/subject/${subject.doubanId}/celebrities">all</a>)</span></h2>
+        <ul>
+          <li class="celebrity">
+            <a href="/personage/1/" title="Frank Darabont"><div class="avatar" style="background-image: url(/images/staff.jpg)"></div></a>
+            <div class="info"><span class="name"><a href="/personage/1/">Frank Darabont</a></span><span class="role" title="Director">Director</span></div>
+          </li>
+        </ul>
+      </div>
+      <a class="related-pic-video" href="/trailer/1/#content" title="Trailer" style="background-image:url(/images/trailer.jpg)"><p class="type-title">Trailer</p></a>
+      <a href="/photos/photo/1/"><img src="/images/movie-photo.jpg" alt="Still" /></a>`
+      : "";
+  const musicExtras =
+    subject.medium === "music"
+      ? `
+      <div class="track-list">
+        <ul class="track-items indent">
+          <li data-track-order="1.">Track One</li>
+          <li data-track-order="2.">Track Two</li>
+        </ul>
+      </div>`
+      : "";
+  const bookExtras =
+    subject.medium === "book"
+      ? `
+      <div class="indent" id="dir_${subject.doubanId}_short">Prologue<br/>Chapter One<br/>...</div>
+      <div class="indent" id="dir_${subject.doubanId}_full" style="display:none">Prologue<br/>Chapter One<br/>Chapter Two<br/>Epilogue<br/></div>`
+      : "";
+  const gameExtras =
+    subject.medium === "game"
+      ? `
+      <div class="mod">
+        <h2>Game videos</h2>
+        <ul><li class="video-mini"><a class="video" href="/game/${subject.doubanId}/video/1/"><img src="/images/game-video.jpg" /></a><a class="title" href="/game/${subject.doubanId}/video/1/"><span>Gameplay video</span></a></li></ul>
+      </div>
+      <div class="mod">
+        <h2>Game photos</h2>
+        <ul><li><a href="/game/${subject.doubanId}/photo/1/"><img src="/images/game-photo.jpg" /></a></li></ul>
+      </div>`
+      : "";
 
   return `
   <html>
@@ -118,6 +180,11 @@ function renderDetail(subject: MockSubject, state: MockRemoteState) {
       <div class="creators">${subject.creators}</div>
       <div class="summary">${subject.summary}<style>.report { color: #bbb; }</style><script>window.createReportButton({ text: "投诉" })</script></div>
       <div class="meta-row"><span class="label">${subject.metaLabel}</span><span class="value">${subject.metaValue}</span></div>
+      ${movieExtras}
+      ${musicExtras}
+      ${bookExtras}
+      ${gameExtras}
+      ${relatedSection}
       <div class="comment-item" data-cid="c1">
         <div class="comment-info"><a>测试用户</a><span class="comment-time">2026-05-10</span></div>
         <p><span class="short">这是一条公开短评。</span></p>
@@ -133,6 +200,25 @@ function renderDetail(subject: MockSubject, state: MockRemoteState) {
       </form>
     </body>
   </html>`;
+}
+
+function renderInterestEditor(subject: MockSubject, state: MockRemoteState) {
+  const action =
+    subject.medium === "game"
+      ? `/game/${subject.doubanId}/interest`
+      : `/${subject.medium}/j/subject/${subject.doubanId}/interest`;
+
+  return `
+  <form data-interest-form action="${action}" method="POST">
+    <input type="hidden" name="ck" value="test-ck" />
+    <label><input type="radio" name="interest" value="wish" ${state.status === "wish" ? "checked" : ""} />wish</label>
+    <label><input type="radio" name="interest" value="do" ${state.status === "doing" ? "checked" : ""} />do</label>
+    <label><input type="radio" name="interest" value="collect" ${state.status === "done" ? "checked" : ""} />collect</label>
+    <select name="rating"><option value="${state.rating ?? ""}" selected>${state.rating ?? ""}</option></select>
+    <input type="text" name="tags" value="${state.tags.join(" ")}" />
+    <textarea name="comment">${state.comment}</textarea>
+    <input type="checkbox" name="sync_douban" value="1" ${state.syncToTimeline ? "checked" : ""} />
+  </form>`;
 }
 
 function renderComments(subject: MockSubject, start = 0, limit = 20) {
@@ -179,6 +265,7 @@ function renderLibrary(subject: MockSubject, status: ShelfStatus, state: MockRem
       <h3>${subject.title}</h3>
       <p class="meta">${subject.creators} / ${subject.year}</p>
       <span class="rating" data-rating="${state.rating ?? ""}"></span>
+      ${state.comment ? `<span class="comment">${state.comment}</span>` : ""}
       <span class="average-rating" data-average-rating="${subject.rating}"></span>
     </article>
   </body></html>`;
@@ -196,6 +283,7 @@ function renderGameLibrary(subject: MockSubject, status: ShelfStatus, state: Moc
         <a href="https://www.douban.com/game/${subject.doubanId}/">${subject.title}</a>
         <div class="meta">${subject.creators} / ${subject.year}</div>
         <span class="rating" data-rating="${state.rating ?? ""}"></span>
+        ${state.comment ? `<span class="comment">${state.comment}</span>` : ""}
       </div>
     </div>
   </body></html>`;
@@ -215,19 +303,45 @@ function renderRanking(subject: MockSubject) {
   </body></html>`;
 }
 
-function renderTimeline(scope: "following" | "mine", peopleId = "demo-user") {
+function renderTop250RankingPage(subject: MockSubject, start = 0) {
   return `
   <html><body>
-    <div class="new-status status-wrapper" data-sid="${scope}-1">
-      <div class="status-item" data-sid="${scope}-1" data-action="看过电影">
-        <a href="/people/${peopleId}/"><img src="/avatar.jpg" />${scope === "mine" ? "我" : "好友 A"}</a>
-        <p class="status-saying">${scope === "mine" ? "我" : "好友 A"} 看过电影</p>
-        <blockquote>很喜欢这个结尾。</blockquote>
-        <a href="/movie/subject/${subjects.movie.doubanId}/"><img src="${subjects.movie.cover}" />${subjects.movie.title}</a>
-        <a href="/people/${peopleId}/status/${scope}-1/">今天 12:00</a>
-        <span>2 回应</span><span>1 转发</span><span>5 赞</span>
-      </div>
-    </div>
+    ${Array.from({ length: 25 }, (_, index) => {
+      const rank = start + index + 1;
+      const doubanId = `${subject.doubanId}${String(rank).padStart(3, "0")}`;
+      const href = subject.medium === "game" ? `/game/${doubanId}/` : `/${subject.medium}/subject/${doubanId}/`;
+      return `
+      <article class="ranking-card" data-rank="${rank}">
+        <a href="${href}"><img src="${subject.cover}" /></a>
+        <h3>${subject.title} ${rank}</h3>
+        <p class="meta">${subject.creators} / ${subject.year}</p>
+        <span class="rating-value">${subject.rating}</span>
+        <p class="blurb">${subject.blurb}</p>
+      </article>`;
+    }).join("")}
+  </body></html>`;
+}
+
+function renderTimeline(scope: "following" | "mine", peopleId = "demo-user", start = 0) {
+  const count = start === 0 ? 30 : 10;
+  return `
+  <html><body>
+    ${Array.from({ length: count }, (_, index) => {
+      const number = start + index + 1;
+      const id = `${scope}-${number}`;
+      const author = scope === "mine" ? "?" : number === 1 ? "?? A" : `?? ${number}`;
+      return `
+      <div class="new-status status-wrapper" data-sid="${id}">
+        <div class="status-item" data-sid="${id}" data-action="????">
+          <a href="/people/${peopleId}/"><img src="/avatar.jpg" />${author}</a>
+          <p class="status-saying">${author} ????</p>
+          <blockquote>??????????????????????????????${number}</blockquote>
+          <a href="/movie/subject/${subjects.movie.doubanId}/"><img src="${subjects.movie.cover}" />${subjects.movie.title}</a>
+          <a href="/people/${peopleId}/status/${id}/">?? ${String(12 + (number % 10)).padStart(2, "0")}:00</a>
+          <span>2 ??</span><span>1 ??</span><span>5 ?</span>
+        </div>
+      </div>`;
+    }).join("")}
   </body></html>`;
 }
 
@@ -246,8 +360,8 @@ export async function createMockDoubanServer() {
     });
   });
 
-  app.get("/", (_request, response) => {
-    response.send(renderTimeline("following"));
+  app.get("/", (request, response) => {
+    response.send(renderTimeline("following", "demo-user", Number(request.query.start ?? 0)));
   });
 
   app.get("/mine/", (_request, response) => {
@@ -259,7 +373,7 @@ export async function createMockDoubanServer() {
   });
 
   app.get("/people/:peopleId/statuses", (request, response) => {
-    response.send(renderTimeline("mine", request.params.peopleId));
+    response.send(renderTimeline("mine", request.params.peopleId, Number(request.query.start ?? 0)));
   });
 
   app.get("/images/:name", (_request, response) => {
@@ -273,6 +387,12 @@ export async function createMockDoubanServer() {
 
   app.get("/:medium/board/:board", (request, response) => {
     const medium = request.params.medium as Medium;
+    const board = String(request.params.board);
+    const start = Number(request.query.start ?? 0);
+    if (board === "top250") {
+      response.send(renderTop250RankingPage(subjects[medium], start));
+      return;
+    }
     response.send(renderRanking(subjects[medium]));
   });
 
@@ -298,6 +418,13 @@ export async function createMockDoubanServer() {
     const subject = subjects[medium];
     const state = states.get(`${medium}:${subject.doubanId}`)!;
     response.send(renderDetail(subject, state));
+  });
+
+  app.get("/:medium/j/subject/:doubanId/interest", (request, response) => {
+    const medium = request.params.medium as Medium;
+    const subject = subjects[medium];
+    const state = states.get(`${medium}:${subject.doubanId}`)!;
+    response.json({ popular_tags: [], html: renderInterestEditor(subject, state) });
   });
 
   app.get("/:medium/subject/:doubanId/comments", (request, response) => {
@@ -332,6 +459,22 @@ export async function createMockDoubanServer() {
     response.send(renderDetail(subject, states.get(`${medium}:${subject.doubanId}`)!));
   });
 
+  app.post("/:medium/j/subject/:doubanId/interest", (request, response) => {
+    const medium = request.params.medium as Medium;
+    const subject = subjects[medium];
+    states.set(`${medium}:${subject.doubanId}`, {
+      status: request.body.interest === "collect" ? "done" : request.body.interest === "do" ? "doing" : "wish",
+      rating: request.body.rating ? Number(request.body.rating) : null,
+      comment: String(request.body.comment ?? ""),
+      tags: String(request.body.tags ?? "")
+        .split(/\s+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      syncToTimeline: String(request.body.sync_douban ?? "1") !== "0"
+    });
+    response.json({ ok: true });
+  });
+
   app.post("/game/:doubanId/interest", (request, response) => {
     const subject = subjects.game;
     states.set(`game:${subject.doubanId}`, {
@@ -359,6 +502,11 @@ export async function createMockDoubanServer() {
     readState(medium: Medium) {
       const subject = subjects[medium];
       return states.get(`${medium}:${subject.doubanId}`)!;
+    },
+    setState(medium: Medium, nextState: Partial<MockRemoteState>) {
+      const subject = subjects[medium];
+      const key = `${medium}:${subject.doubanId}`;
+      states.set(key, { ...states.get(key)!, ...nextState });
     },
     close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
   };

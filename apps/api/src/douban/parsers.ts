@@ -5,7 +5,10 @@ import type {
   RankingItem,
   ShelfStatus,
   SubjectComment,
+  SubjectMediaGroup,
   SubjectRecord,
+  SubjectSectionLink,
+  SubjectStaffMember,
   TimelineEngagement,
   TimelineItem
 } from "../../../../packages/shared/src";
@@ -18,7 +21,7 @@ export class DoubanSessionError extends Error {
 }
 
 export interface ParsedUserCollection {
-  items: Array<{ subject: SubjectRecord; status: ShelfStatus; rating: number | null }>;
+  items: Array<{ subject: SubjectRecord; status: ShelfStatus; rating: number | null; comment: string | null }>;
   hasNext: boolean;
   nextPage: number | null;
 }
@@ -34,6 +37,7 @@ export interface ParsedInterestForm {
 export interface ParsedInterestSelection {
   status: ShelfStatus | null;
   rating: number | null;
+  comment: string | null;
 }
 
 export function ensureNoAccessChallenge(html: string, finalUrl: string) {
@@ -245,6 +249,10 @@ function imageFromRoot(root: cheerio.Cheerio<any>) {
   return backgroundStyle?.match(/url\(['"]?([^'")]+)['"]?\)/)?.[1] ?? null;
 }
 
+function imageFromStyle(value: string | undefined | null) {
+  return value?.match(/url\(['"]?([^'")]+)['"]?\)/)?.[1] ?? null;
+}
+
 function subjectFromRoot($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>, baseUrl: string, medium: Medium) {
   const anchor = findSubjectAnchor($, root);
   const href = anchor.attr("href");
@@ -362,6 +370,474 @@ function parseGameExploreResults(html: string, baseUrl: string, board: RankingBo
   } catch {
     return [];
   }
+}
+
+function emptySubjectMedia(): SubjectMediaGroup {
+  return {
+    videos: [],
+    images: []
+  };
+}
+
+function pushUnique<T>(items: T[], seen: Set<string>, key: string | null, item: T) {
+  if (!key || seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+  items.push(item);
+}
+
+function cleanListText(value: string | null) {
+  return value
+    ?.replace(/·/g, " ")
+    .replace(/\(\s*(更多|收起|展开全部)\s*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() ?? null;
+}
+
+function sectionByHeading($: cheerio.CheerioAPI, pattern: RegExp) {
+  const heading = $("h2, h3").filter((_, element) => pattern.test(safeText($(element).text()) ?? "")).first();
+  if (heading.length === 0) {
+    return heading;
+  }
+  const block = heading.closest("#recommendations, #db-rec-section, #rec-ebook-section, .block5, .subject_show, .mod, .related-info, .section, .article");
+  return block.length > 0 ? block.first() : heading.parent();
+}
+
+function normalizeListText(value: string | null) {
+  return value
+    ?.replace(/[·•]/g, " ")
+    .replace(/\(\s*(更多|收起|展开全部|more|collapse)\s*\)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim() ?? null;
+}
+
+function parseRecommendedSubjects($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectRecord[] {
+  const scope =
+    $("#recommendations").first().length > 0
+      ? $("#recommendations").first()
+      : $("#db-rec-section").first().length > 0
+        ? $("#db-rec-section").first()
+        : sectionByHeading($, /也喜欢/);
+  const items: SubjectRecord[] = [];
+  const seen = new Set<string>();
+
+  scope.find("dl").each((_, element) => {
+    const root = $(element);
+    const anchor = root.find("a[href]").filter((_, link) => extractDoubanId($(link).attr("href") ?? "") != null).first();
+    const href = anchor.attr("href");
+    const externalUrl = absoluteUrl(baseUrl, href);
+    const doubanId = href ? extractDoubanId(href) : null;
+    const title =
+      safeText(root.find("img").first().attr("alt")) ??
+      safeText(root.find("dd a[href], .title a[href], a[href]").filter((_, link) => safeText($(link).text()) != null).first().text());
+    if (!doubanId || !title || seen.has(doubanId)) {
+      return;
+    }
+    seen.add(doubanId);
+    items.push(
+      createSubject(baseUrl, medium, {
+        doubanId,
+        title,
+        coverUrl: root.find("img").first().attr("src"),
+        averageRating: ratingFromRoot(root),
+        metadata: {
+          externalUrl: externalUrl ?? ""
+        }
+      })
+    );
+  });
+
+  return items.slice(0, 12);
+}
+
+function parseSubjectStaff($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectStaffMember[] {
+  if (medium !== "movie") {
+    return [];
+  }
+  const staff: SubjectStaffMember[] = [];
+  const seen = new Set<string>();
+  $("#celebrities li.celebrity, #celebrities .celebrity").each((_, element) => {
+    const root = $(element);
+    const nameLink = root.find(".name a[href], a.name[href], a[href]").filter((_, link) => safeText($(link).text()) != null || safeText($(link).attr("title")) != null).first();
+    const name = safeText(nameLink.text()) ?? safeText(nameLink.attr("title"));
+    if (!name) {
+      return;
+    }
+    pushUnique(staff, seen, name, {
+      name,
+      role: safeText(root.find(".role").first().attr("title")) ?? safeText(root.find(".role").first().text()),
+      avatarUrl: root.find("img").first().attr("src") ?? imageFromStyle(root.find(".avatar").first().attr("style")) ?? null,
+      profileUrl: absoluteUrl(baseUrl, nameLink.attr("href"))
+    });
+  });
+  return staff.slice(0, 12);
+}
+
+function parseSubjectMedia($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectMediaGroup {
+  const media = emptySubjectMedia();
+  const seen = new Set<string>();
+  if (medium !== "movie" && medium !== "game") {
+    return media;
+  }
+
+  const addMedia = (type: "video" | "image", root: cheerio.Cheerio<any>, href: string | undefined | null, fallbackTitle?: string | null) => {
+    const url = absoluteUrl(baseUrl, href);
+    if (!url) {
+      return;
+    }
+    const title =
+      cleanListText(safeText(root.attr("title"))) ??
+      cleanListText(safeText(root.find(".type-title, .title, span").first().text())) ??
+      cleanListText(safeText(root.find("img").first().attr("alt"))) ??
+      fallbackTitle ??
+      null;
+    const thumbnailUrl =
+      root.find("img").first().attr("src") ??
+      imageFromStyle(root.attr("style")) ??
+      imageFromStyle(root.find("[style*='background-image']").first().attr("style")) ??
+      null;
+    pushUnique(type === "video" ? media.videos : media.images, seen, url, {
+      type,
+      title,
+      thumbnailUrl,
+      url
+    });
+  };
+
+  if (medium === "game") {
+    sectionByHeading($, /游戏视频/).find("li").each((_, element) => {
+      const root = $(element);
+      const link = root.find("a.video[href], a[href*='/video/']").first();
+      addMedia("video", root, link.attr("href"));
+    });
+    sectionByHeading($, /游戏图片/).find("li").each((_, element) => {
+      const root = $(element);
+      const link = root.find("a[href*='/photo/']").first();
+      addMedia("image", root, link.attr("href"));
+    });
+    return {
+      videos: media.videos.slice(0, 6),
+      images: media.images.slice(0, 8)
+    };
+  }
+
+  $("a.related-pic-video[href], a[href*='/trailer/']").each((_, element) => {
+    addMedia("video", $(element), $(element).attr("href"), "预告片");
+  });
+  $("a[href*='/photos/photo/'], a[href*='/photo/']").each((_, element) => {
+    const root = $(element);
+    if (root.closest("#mainpic, #recommendations, #celebrities, .comments, .comment-item").length > 0) {
+      return;
+    }
+    addMedia("image", root, root.attr("href"));
+  });
+
+  return {
+    videos: media.videos.slice(0, 4),
+    images: media.images.slice(0, 8)
+  };
+}
+
+function parseTrackList($: cheerio.CheerioAPI, medium: Medium) {
+  if (medium !== "music") {
+    return [];
+  }
+  const tracks: string[] = [];
+  $(".track-list .track-items li, .track-list li").each((_, element) => {
+    const track = safeText($(element).text())?.replace(/^\d+\.?\s*/, "");
+    if (track) {
+      tracks.push(track);
+    }
+  });
+  return tracks.slice(0, 50);
+}
+
+function parseTableOfContents($: cheerio.CheerioAPI, doubanId: string, medium: Medium) {
+  if (medium !== "book") {
+    return [];
+  }
+  const source = $(`#dir_${doubanId}_full`).first().length > 0 ? $(`#dir_${doubanId}_full`).first() : $(`#dir_${doubanId}_short`).first();
+  if (source.length === 0) {
+    return [];
+  }
+  const clone = source.clone();
+  clone.find("script, style, a").remove();
+  clone.find("br").replaceWith("\n");
+  return clone
+    .text()
+    .split(/\n+/)
+    .map((line) => cleanListText(line))
+    .filter((line): line is string => Boolean(line && !/^·+$/.test(line)))
+    .slice(0, 80);
+}
+
+function parseSectionLinks($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectSectionLink[] {
+  const links: SubjectSectionLink[] = [];
+  const seen = new Set<string>();
+  const add = (key: string, label: string, href: string | undefined | null) => {
+    const url = absoluteUrl(baseUrl, href);
+    if (!url) {
+      return;
+    }
+    pushUnique(links, seen, `${key}:${url}`, { key, label, url });
+  };
+
+  add("related", "全部推荐", $("#recommendations h2 a, #db-rec-section h2 a").first().attr("href"));
+  if (medium === "movie") {
+    add("staff", "全部演职员", $("#celebrities h2 a").first().attr("href"));
+    add("videos", "全部视频", $("a[href*='/trailer/']").first().attr("href"));
+    add("images", "全部图片", $("a[href*='/photos']").first().attr("href"));
+  } else if (medium === "game") {
+    const videoSection = sectionByHeading($, /游戏视频/);
+    const imageSection = sectionByHeading($, /游戏图片/);
+    add("videos", "全部视频", videoSection.find("h2 a[href*='videos']").first().attr("href"));
+    add("images", "全部图片", imageSection.find("h2 a[href*='photos']").first().attr("href"));
+  }
+
+  return links;
+}
+
+function sanitizeListText(value: string | null) {
+  return value
+    ?.replace(/[·•・●]/g, " ")
+    .replace(/\(\s*(more|collapse|expand|show more|show less|更多|展开全部|收起)\s*\)/gi, " ")
+    .replace(/^[\s\-–—*#.、]+|[\s\-–—*#.、]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim() ?? null;
+}
+
+function findRecommendationScope($: cheerio.CheerioAPI) {
+  if ($("#recommendations").first().length > 0) {
+    return $("#recommendations").first();
+  }
+  if ($("#db-rec-section").first().length > 0) {
+    return $("#db-rec-section").first();
+  }
+  return sectionByHeading($, /(also like|also liked|也喜欢|喜欢.*也喜欢|推荐)/i);
+}
+
+function parseRecommendedSubjectsRobust($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectRecord[] {
+  const scope = findRecommendationScope($);
+  const items: SubjectRecord[] = [];
+  const seen = new Set<string>();
+
+  const addSubject = (root: cheerio.Cheerio<any>) => {
+    const subject = subjectFromRoot($, root, baseUrl, medium);
+    if (!subject || seen.has(subject.doubanId)) {
+      return;
+    }
+    seen.add(subject.doubanId);
+    items.push(subject);
+  };
+
+  const roots = scope.find("dl");
+  if (roots.length > 0) {
+    roots.each((_, element) => addSubject($(element)));
+  } else {
+    scope.find("li, article, .subject-item, .recommend-item").each((_, element) => addSubject($(element)));
+  }
+
+  if (items.length === 0) {
+    scope
+      .find("a[href]")
+      .filter((_, element) => extractDoubanId($(element).attr("href") ?? "") != null)
+      .each((_, element) => {
+        const anchor = $(element);
+        const href = anchor.attr("href");
+        const doubanId = href ? extractDoubanId(href) : null;
+        const title = safeText(anchor.attr("title")) ?? safeText(anchor.text()) ?? safeText(anchor.find("img").attr("alt"));
+        if (!doubanId || !title || seen.has(doubanId)) {
+          return;
+        }
+        seen.add(doubanId);
+        items.push(
+          createSubject(baseUrl, medium, {
+            doubanId,
+            title,
+            coverUrl: anchor.find("img").attr("src"),
+            metadata: {
+              externalUrl: absoluteUrl(baseUrl, href) ?? ""
+            }
+          })
+        );
+      });
+  }
+
+  return items.slice(0, 12);
+}
+
+function parseSubjectMediaRobust($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectMediaGroup {
+  const media = emptySubjectMedia();
+  const seen = new Set<string>();
+  if (medium !== "movie" && medium !== "game") {
+    return media;
+  }
+
+  const addMedia = (type: "video" | "image", root: cheerio.Cheerio<any>, href: string | undefined | null, fallbackTitle?: string | null) => {
+    const url = absoluteUrl(baseUrl, href);
+    if (!url) {
+      return;
+    }
+    const title =
+      sanitizeListText(safeText(root.attr("title"))) ??
+      sanitizeListText(safeText(root.find(".type-title, .title, span").first().text())) ??
+      sanitizeListText(safeText(root.find("img").first().attr("alt"))) ??
+      sanitizeListText(fallbackTitle ?? null) ??
+      null;
+    const thumbnailUrl =
+      root.find("img").first().attr("src") ??
+      imageFromStyle(root.attr("style")) ??
+      imageFromStyle(root.find("[style*='background-image']").first().attr("style")) ??
+      null;
+    pushUnique(type === "video" ? media.videos : media.images, seen, url, {
+      type,
+      title,
+      thumbnailUrl,
+      url
+    });
+  };
+
+  const collectGameVideos = (scope: cheerio.Cheerio<any>) => {
+    scope.find("li.video-mini, a.video[href], a[href*='/video/']").each((_, element) => {
+      const root = $(element);
+      const container = root.is("li") ? root : root.closest("li").length > 0 ? root.closest("li") : root;
+      const link = root.is("a") ? root : root.find("a.video[href], a[href*='/video/']").first();
+      addMedia("video", container, link.attr("href"), safeText(link.text()));
+    });
+  };
+
+  const collectImages = (scope: cheerio.Cheerio<any>) => {
+    scope.find("a[href*='/photos/photo/'], a[href*='/photo/']").each((_, element) => {
+      const root = $(element);
+      if (root.closest("#mainpic, #recommendations, #db-rec-section, #celebrities, .comments, .comment-item").length > 0) {
+        return;
+      }
+      addMedia("image", root, root.attr("href"));
+    });
+  };
+
+  if (medium === "game") {
+    collectGameVideos(sectionByHeading($, /(game videos?|视频|预告)/i));
+    collectImages(sectionByHeading($, /(game photos?|图片|剧照)/i));
+    if (media.videos.length === 0) {
+      collectGameVideos($.root());
+    }
+    if (media.images.length === 0) {
+      collectImages($.root());
+    }
+    return {
+      videos: media.videos.slice(0, 6),
+      images: media.images.slice(0, 8)
+    };
+  }
+
+  $("a.related-pic-video[href], a[href*='/trailer/'], a[href*='/video/']").each((_, element) => {
+    const root = $(element);
+    if (root.closest("#recommendations, #db-rec-section, .comments, .comment-item").length > 0) {
+      return;
+    }
+    addMedia("video", root, root.attr("href"), "Trailer");
+  });
+  collectImages($.root());
+
+  return {
+    videos: media.videos.slice(0, 4),
+    images: media.images.slice(0, 8)
+  };
+}
+
+function parseTrackListRobust($: cheerio.CheerioAPI, medium: Medium) {
+  if (medium !== "music") {
+    return [];
+  }
+  const tracks: string[] = [];
+  const seen = new Set<string>();
+  $(".track-list .track-items li, .track-list li").each((_, element) => {
+    const track = sanitizeListText(safeText($(element).text())?.replace(/^\d+\.?\s*/, "") ?? null);
+    if (track && !seen.has(track)) {
+      seen.add(track);
+      tracks.push(track);
+    }
+  });
+  return tracks.slice(0, 50);
+}
+
+function parseTableOfContentsRobust($: cheerio.CheerioAPI, doubanId: string, medium: Medium) {
+  if (medium !== "book") {
+    return [];
+  }
+  const source = $(`#dir_${doubanId}_full`).first().length > 0 ? $(`#dir_${doubanId}_full`).first() : $(`#dir_${doubanId}_short`).first();
+  if (source.length === 0) {
+    return [];
+  }
+  const clone = source.clone();
+  clone.find("script, style, a").remove();
+  clone.find("br").replaceWith("\n");
+  return clone
+    .text()
+    .split(/\n+/)
+    .map((line) => sanitizeListText(line))
+    .filter((line): line is string => Boolean(line && !/^[.…·•\-]+$/.test(line)))
+    .slice(0, 80);
+}
+
+function parseSectionLinksRobust($: cheerio.CheerioAPI, baseUrl: string, medium: Medium): SubjectSectionLink[] {
+  const links: SubjectSectionLink[] = [];
+  const seen = new Set<string>();
+  const add = (key: string, label: string, href: string | undefined | null) => {
+    const url = absoluteUrl(baseUrl, href);
+    if (!url) {
+      return;
+    }
+    pushUnique(links, seen, `${key}:${url}`, { key, label, url });
+  };
+
+  const recommendationScope = findRecommendationScope($);
+  add(
+    "related",
+    "All recommendations",
+    recommendationScope.find("h2 a[href], h3 a[href], .pl a[href]").first().attr("href") ??
+      recommendationScope.find("a[href]").filter((_, element) => extractDoubanId($(element).attr("href") ?? "") != null).first().attr("href")
+  );
+
+  if (medium === "movie") {
+    add("staff", "Cast and crew", $("#celebrities h2 a[href], #celebrities .pl a[href]").first().attr("href"));
+    add("videos", "Videos", $("a.related-pic-video[href], a[href*='/trailer/'], a[href*='/video/']").first().attr("href"));
+    add(
+      "images",
+      "Images",
+      $("a[href*='/photos']").first().attr("href") ??
+        $("a[href*='/photo/']")
+          .filter((_, element) => $(element).closest("#recommendations, #db-rec-section, .comments, .comment-item").length === 0)
+          .first()
+          .attr("href")
+    );
+  } else if (medium === "game") {
+    add("videos", "Videos", $("li.video-mini a[href], a.video[href], a[href*='/video/']").first().attr("href"));
+    add(
+      "images",
+      "Images",
+      $("a[href*='/photo/']")
+        .filter((_, element) => $(element).closest("#recommendations, #db-rec-section, .comments, .comment-item").length === 0)
+        .first()
+        .attr("href")
+    );
+  }
+
+  return links;
+}
+
+export function parseSubjectDetailExtras(html: string, baseUrl: string, medium: Medium, doubanId: string) {
+  const $ = cheerio.load(html);
+  return {
+    staff: parseSubjectStaff($, baseUrl, medium),
+    media: parseSubjectMediaRobust($, baseUrl, medium),
+    trackList: parseTrackListRobust($, medium),
+    tableOfContents: parseTableOfContentsRobust($, doubanId, medium),
+    relatedSubjects: parseRecommendedSubjectsRobust($, baseUrl, medium),
+    sectionLinks: parseSectionLinksRobust($, baseUrl, medium)
+  };
 }
 
 export function parseSubjectDetail(html: string, baseUrl: string, medium: Medium): SubjectRecord {
@@ -562,17 +1038,40 @@ export function parseRanking(html: string, baseUrl: string, medium: Medium, boar
 
 export function parseUserCollection(html: string, baseUrl: string, medium: Medium, fallbackStatus: ShelfStatus): ParsedUserCollection {
   const $ = cheerio.load(html);
-  const items: ParsedUserCollection["items"] = [];
-  $(".collection-item, .interest-item, .common-item, tr.item, article, li").each((_, element) => {
+  const items = new Map<string, ParsedUserCollection["items"][number]>();
+  $(".collection-item, .interest-item, .common-item, .item.comment-item, tr.item, article, li").each((_, element) => {
     const root = $(element);
     const subject = subjectFromRoot($, root, baseUrl, medium);
     if (!subject) {
       return;
     }
-    items.push({
+    const nextItem = {
       status: fromDoubanStatus(root.attr("data-status") ?? undefined, fallbackStatus),
       rating: ratingFromRoot(root),
+      comment: safeText(root.find(".comment, .short-note, .comment-text").first().text()),
       subject
+    };
+    const existing = items.get(subject.doubanId);
+    if (!existing) {
+      items.set(subject.doubanId, nextItem);
+      return;
+    }
+    items.set(subject.doubanId, {
+      status: nextItem.status ?? existing.status,
+      rating: existing.rating ?? nextItem.rating,
+      comment: existing.comment ?? nextItem.comment,
+      subject: {
+        ...existing.subject,
+        ...nextItem.subject,
+        coverUrl: existing.subject.coverUrl ?? nextItem.subject.coverUrl,
+        averageRating: existing.subject.averageRating ?? nextItem.subject.averageRating,
+        summary: existing.subject.summary ?? nextItem.subject.summary,
+        creators: existing.subject.creators.length > 0 ? existing.subject.creators : nextItem.subject.creators,
+        metadata:
+          Object.keys(existing.subject.metadata).length > 0
+            ? existing.subject.metadata
+            : nextItem.subject.metadata
+      }
     });
   });
 
@@ -593,7 +1092,7 @@ export function parseUserCollection(html: string, baseUrl: string, medium: Mediu
   }
 
   return {
-    items,
+    items: Array.from(items.values()),
     hasNext: Number.isFinite(nextPage) && Number(nextPage) > 0,
     nextPage: Number.isFinite(nextPage) ? Number(nextPage) : null
   };
@@ -686,10 +1185,13 @@ export function parseInterestSelection(html: string, detailUrl: string): ParsedI
     const form = parseInterestForm(html, detailUrl);
     const rawStatus = form.defaultFields[form.statusFieldName];
     const ratingValue = form.ratingFieldName ? form.defaultFields[form.ratingFieldName] ?? "" : "";
+    const commentValue =
+      Object.entries(form.defaultFields).find(([name]) => /^comment$/i.test(name) || /comment/i.test(name) || /intro/i.test(name))?.[1] ?? "";
     const numericRating = Number(ratingValue);
     return {
       status: rawStatus ? fromDoubanStatus(rawStatus, "wish") : null,
-      rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null
+      rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null,
+      comment: safeText(commentValue)
     };
   } catch {
     const $ = cheerio.load(html);
@@ -706,7 +1208,8 @@ export function parseInterestSelection(html: string, detailUrl: string): ParsedI
     }
     return {
       status,
-      rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null
+      rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null,
+      comment: null
     };
   }
 }
@@ -715,13 +1218,42 @@ export function parsePeopleId(html: string) {
   return html.match(/people\/([^/"'?]+)\//)?.[1] ?? null;
 }
 
+function splitTimelineTailMeta(text: string) {
+  let body = text.trim();
+  const parts: string[] = [];
+
+  while (true) {
+    const match = body.match(/\s*((?:\d+\s*)?(?:回应|转发|赞)(?:\s*\(\d+\))?|删除)$/);
+    if (!match || match.index == null) {
+      break;
+    }
+    parts.unshift(match[1].trim());
+    body = body.slice(0, match.index).trimEnd();
+  }
+
+  return {
+    body: body.trim(),
+    meta: parts.join(" ")
+  };
+}
+
 function parseEngagements(text: string): TimelineEngagement[] {
-  return (["回应", "转发", "赞"] as const)
-    .filter((label) => text.includes(label))
-    .map((label) => {
-      const match = text.match(new RegExp(`(\\d+)\\s*${label}`));
-      return { label, count: match ? Number(match[1]) : null };
-    });
+  const source = splitTimelineTailMeta(text).meta || text;
+  const regex = /(\d+)\s*(回应|转发|赞)|(回应|转发|赞)(?:\s*\((\d+)\))?/g;
+  const engagements: TimelineEngagement[] = [];
+  const seen = new Set<string>();
+
+  for (const match of source.matchAll(regex)) {
+    const label = (match[2] ?? match[3]) as TimelineEngagement["label"] | undefined;
+    if (!label || seen.has(label)) {
+      continue;
+    }
+    const count = match[1] ?? match[4];
+    engagements.push({ label, count: count ? Number(count) : null });
+    seen.add(label);
+  }
+
+  return engagements;
 }
 
 function cleanTimelineContent(input: string, removeParts: Array<string | null>) {
@@ -731,10 +1263,74 @@ function cleanTimelineContent(input: string, removeParts: Array<string | null>) 
       output = output.replace(part, " ");
     }
   }
-  return output
-    .replace(/\b(回应|转发|删除|赞)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return splitTimelineTailMeta(output).body.replace(/\s+/g, " ").trim();
+}
+
+function timelineText(root: cheerio.Cheerio<any>) {
+  const clone = root.clone();
+  clone.find("script, style, noscript, template").remove();
+  return safeText(clone.text()) ?? "";
+}
+
+function looksLikeImageUrl(value: string) {
+  return /^https?:\/\//.test(value) && /(\.avif|\.gif|\.jpe?g|\.png|\.webp)(?:[?#]|$)/i.test(value);
+}
+
+function collectTimelinePhotoUrls(input: unknown, baseUrl: string, push: (url: string) => void) {
+  if (typeof input === "string") {
+    const normalized = absoluteUrl(baseUrl, input);
+    if (normalized && looksLikeImageUrl(normalized)) {
+      push(normalized);
+    }
+    return;
+  }
+  if (Array.isArray(input)) {
+    input.forEach((item) => collectTimelinePhotoUrls(item, baseUrl, push));
+    return;
+  }
+  if (!input || typeof input !== "object") {
+    return;
+  }
+  for (const value of Object.values(input)) {
+    collectTimelinePhotoUrls(value, baseUrl, push);
+  }
+}
+
+function parseTimelinePhotos($: cheerio.CheerioAPI, wrapper: cheerio.Cheerio<any>, baseUrl: string, ignoredUrls: string[]) {
+  const photos: string[] = [];
+  const seen = new Set<string>(ignoredUrls.filter(Boolean));
+  const push = (url: string) => {
+    if (seen.has(url)) {
+      return;
+    }
+    seen.add(url);
+    photos.push(url);
+  };
+
+  wrapper.find("img[src]").each((_, element) => {
+    const image = $(element);
+    if (image.closest("a[href*='/people/']").length > 0) {
+      return;
+    }
+    const src = absoluteUrl(baseUrl, image.attr("src"));
+    if (src && looksLikeImageUrl(src)) {
+      push(src);
+    }
+  });
+
+  wrapper.find("script").each((_, element) => {
+    const script = $(element).html() ?? "";
+    const matches = script.matchAll(/(?:var|let|const)\s+photos\s*=\s*(\[[\s\S]*?\]);/g);
+    for (const match of matches) {
+      try {
+        collectTimelinePhotoUrls(JSON.parse(match[1]), baseUrl, push);
+      } catch {
+        // Ignore malformed inline photo payloads.
+      }
+    }
+  });
+
+  return photos;
 }
 
 export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
@@ -761,28 +1357,32 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
       wrapper.find(".block-subject").first().length > 0
         ? wrapper.find(".block-subject").first()
         : wrapper.find(".block").filter((_, block) => $(block).find("a[href]").filter((_, link) => extractDoubanId($(link).attr("href") ?? "") != null).length > 0).first();
-    const subjectScope = subjectRoot.length > 0 ? subjectRoot : wrapper;
     const subjectLink =
-      subjectScope.find(".title a[href]").first().length > 0
-        ? subjectScope.find(".title a[href]").first()
-        : subjectScope.find("a.media[href], a[href]").filter((_, link) => extractDoubanId($(link).attr("href") ?? "") != null).first();
+      subjectRoot.find(".title a[href]").first().length > 0
+        ? subjectRoot.find(".title a[href]").first()
+        : wrapper.find("a.media[href], a[href]").filter((_, link) => extractDoubanId($(link).attr("href") ?? "") != null).first();
     const authorImage = wrapper.find(".usr-pic img, a[href*='/people/'] img").first();
-    const subjectImage = subjectScope.find(".pic img, a.media img, img").filter((_, image) => $(image).closest("a[href*='/people/']").length === 0).first();
     const authorName = safeText(peopleLink.text());
-    const subjectTitle =
-      safeText(subjectRoot.find(".title a").first().text()) ??
-      safeText(subjectLink.attr("title")) ??
-      safeText(subjectLink.text()) ??
-      safeText(subjectImage.attr("alt"));
+    const targetType = statusRoot.attr("data-target-type");
+    const objectId = statusRoot.attr("data-object-id");
+    const hasSubject = subjectRoot.length > 0 || subjectLink.length > 0 || Boolean(targetType && objectId);
+    const subjectImage =
+      hasSubject
+        ? (subjectRoot.length > 0 ? subjectRoot : subjectLink).find("img").filter((_, image) => $(image).closest("a[href*='/people/']").length === 0).first()
+        : null;
+    const subjectTitle = hasSubject
+      ? safeText(subjectRoot.find(".title a").first().text()) ??
+        safeText(subjectLink.attr("title")) ??
+        safeText(subjectLink.text()) ??
+        safeText(subjectImage?.attr("alt"))
+      : null;
     const createdAtText = safeText(detailLink.text()) ?? safeText(wrapper.find(".created_at, .status-time, .pubtime").first().text());
     const actionText =
       cleanTimelineContent(safeText(wrapper.find(".hd .text").first().text()) ?? "", [authorName]) ||
       safeText(wrapper.find(".status-saying, .status-header").first().text()) ||
       statusRoot.attr("data-action") ||
       null;
-    const fullText = safeText(wrapper.text()) ?? "";
-    const targetType = statusRoot.attr("data-target-type");
-    const objectId = statusRoot.attr("data-object-id");
+    const fullText = timelineText(wrapper);
     const fallbackSubjectUrl =
       objectId && targetType === "game"
         ? `${baseUrl.replace(/\/$/, "")}/game/${objectId}/`
@@ -790,20 +1390,24 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
           ? `https://${targetType === "book" ? "book" : targetType === "music" ? "music" : "movie"}.douban.com/subject/${objectId}/`
           : null;
     const rawSubjectUrl = absoluteUrl(baseUrl, subjectLink.attr("href"));
-    const subjectUrl = rawSubjectUrl && extractDoubanId(rawSubjectUrl) ? rawSubjectUrl : fallbackSubjectUrl ?? rawSubjectUrl;
+    const subjectUrl = hasSubject ? (rawSubjectUrl && extractDoubanId(rawSubjectUrl) ? rawSubjectUrl : fallbackSubjectUrl ?? rawSubjectUrl) : null;
+    const authorAvatarUrl = authorImage.attr("src") ? new URL(authorImage.attr("src")!, baseUrl).toString() : null;
+    const subjectCoverUrl = hasSubject && subjectImage?.attr("src") ? new URL(subjectImage.attr("src")!, baseUrl).toString() : null;
+    const photoUrls = parseTimelinePhotos($, wrapper, baseUrl, [authorAvatarUrl ?? "", subjectCoverUrl ?? ""]);
 
     items.push({
       id,
       authorName,
       authorUrl: absoluteUrl(baseUrl, peopleLink.attr("href")),
-      authorAvatarUrl: authorImage.attr("src") ? new URL(authorImage.attr("src")!, baseUrl).toString() : null,
+      authorAvatarUrl,
       actionText,
       content: cleanTimelineContent(fullText, [authorName, subjectTitle, createdAtText, actionText]) || null,
       createdAtText,
       detailUrl: absoluteUrl(baseUrl, detailLink.attr("href")),
       subjectTitle,
       subjectUrl,
-      subjectCoverUrl: subjectImage.attr("src") ? new URL(subjectImage.attr("src")!, baseUrl).toString() : null,
+      subjectCoverUrl,
+      photoUrls,
       engagements: parseEngagements(fullText)
     });
   });

@@ -25,7 +25,7 @@ describe("End-to-end sync flow", () => {
       allowedOrigin: null
     });
     agent = request.agent(context.app);
-    await agent.post("/api/settings/douban-session/import").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
     await agent.post("/api/sync/pull").send({}).expect(200);
     await context.sync.drainQueue();
   });
@@ -37,11 +37,7 @@ describe("End-to-end sync flow", () => {
   });
 
   it("updates local state, pushes to douban, and reconciles", async () => {
-    const updateResponse = await agent
-      .post("/api/library/movie/1292052/state")
-      .send({ status: "done", rating: 4 })
-      .expect(200);
-
+    const updateResponse = await agent.post("/api/library/movie/1292052/state").send({ status: "done", rating: 4 }).expect(200);
     expect(updateResponse.body.userItem.syncState).toBe("pending_push");
 
     await context.sync.drainQueue();
@@ -82,5 +78,44 @@ describe("End-to-end sync flow", () => {
     expect(remoteState.comment).toBe("这次主要看系统设计。");
     expect(remoteState.tags).toEqual(["冒险", "开放世界"]);
     expect(remoteState.syncToTimeline).toBe(false);
+  });
+
+  it("reads the current user's remote comment back from the subject detail page", async () => {
+    await agent
+      .post("/api/library/movie/1292052/state")
+      .send({ status: "done", rating: 4, comment: "这次主要看系统设计。" })
+      .expect(200);
+
+    await context.sync.drainQueue();
+
+    const detail = await agent.get("/api/subjects/movie/1292052").expect(200);
+    expect(detail.body.userItem.comment).toBe("这次主要看系统设计。");
+
+    const remoteState = mock.readState("movie");
+    expect(remoteState.comment).toBe("这次主要看系统设计。");
+  });
+  it("reads the current user's remote comment from the interest editor even when the detail page omits it", async () => {
+    mock.setState("movie", {
+      status: "done",
+      rating: 4,
+      comment: "remote-comment-from-interest"
+    });
+
+    const detail = await agent.get("/api/subjects/movie/1292052").expect(200);
+    expect(detail.body.userItem.comment).toBe("remote-comment-from-interest");
+  });
+
+  it("persists collection comments during manual pull", async () => {
+    mock.setState("movie", {
+      status: "done",
+      rating: 4,
+      comment: "collection-comment"
+    });
+
+    await agent.post("/api/sync/pull").send({}).expect(200);
+    await context.sync.drainQueue();
+
+    const detail = await agent.get("/api/subjects/movie/1292052").expect(200);
+    expect(detail.body.userItem.comment).toBe("collection-comment");
   });
 });
