@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthMeResponse, Medium, SubjectDetailResponse, SubjectRecord } from "../../../../packages/shared/src";
@@ -30,9 +31,13 @@ function buildDetailResponse(medium: Medium, doubanId: string, title: string, ov
       {
         id: "c1",
         author: "Commenter",
+        authorUrl: null,
+        authorAvatarUrl: null,
+        userVoteState: "not_voted",
         content: "Nice detail page",
         rating: null,
         createdAt: "2026-05-13",
+        platform: null,
         votes: 3
       }
     ],
@@ -49,8 +54,11 @@ function buildDetailResponse(medium: Medium, doubanId: string, title: string, ov
   };
 }
 
-function renderSubjectDetailPage(medium: Medium, doubanId: string, response: SubjectDetailResponse) {
-  vi.spyOn(api, "getAuthMe").mockResolvedValue({
+function renderSubjectDetailPage(
+  medium: Medium,
+  doubanId: string,
+  response: SubjectDetailResponse,
+  authMe: AuthMeResponse = {
     authenticated: false,
     user: null,
     sessionStatus: {
@@ -62,7 +70,9 @@ function renderSubjectDetailPage(medium: Medium, doubanId: string, response: Sub
       lastCheckedAt: null,
       lastError: null
     }
-  } satisfies AuthMeResponse);
+  }
+) {
+  vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
 
   vi.spyOn(api, "getSubjectDetail").mockResolvedValue(response);
   vi.spyOn(api, "getSubjectComments").mockResolvedValue({
@@ -144,6 +154,8 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByRole("heading", { name: "视频 / 图片" })).toBeInTheDocument();
     expect(screen.getByText("Official Trailer")).toBeInTheDocument();
     expect(screen.getByText("Still One")).toBeInTheDocument();
+    expect(screen.queryByText("全部视频")).not.toBeInTheDocument();
+    expect(screen.queryByText("全部图片")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢这部电影的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Forrest Gump")).toBeInTheDocument();
   });
@@ -221,5 +233,180 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Screenshot")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢此游戏的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Related Game")).toBeInTheDocument();
+  });
+
+  it("renders user summary, richer comments, and load-more actions", async () => {
+    const user = userEvent.setup();
+    renderSubjectDetailPage(
+      "game",
+      "21355730",
+      buildDetailResponse("game", "21355730", "Game Demo", {
+        userItem: {
+          medium: "game",
+          doubanId: "21355730",
+          status: "done",
+          rating: 4,
+          comment: "二周目补完了石之心。",
+          tags: ["开放世界", "任务设计"],
+          syncToTimeline: true,
+          syncState: "synced",
+          errorMessage: null,
+          updatedAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          lastPushedAt: new Date().toISOString()
+        },
+        comments: [
+          {
+            id: "c1",
+            author: "Commenter",
+            authorUrl: "https://www.douban.com/people/commenter/",
+            authorAvatarUrl: "https://img.example.test/avatar.jpg",
+            userVoteState: "not_voted",
+            content: "Nice detail page",
+            rating: "推荐",
+            createdAt: "2026-05-13",
+            platform: "PC",
+            votes: 3
+          }
+        ],
+        media: {
+          videos: Array.from({ length: 4 }, (_, index) => ({
+            type: "video" as const,
+            title: `Video ${index + 1}`,
+            thumbnailUrl: `https://img.example.test/video-${index + 1}.jpg`,
+            url: `https://www.douban.com/game/21355730/video/${index + 1}/`
+          })),
+          images: Array.from({ length: 4 }, (_, index) => ({
+            type: "image" as const,
+            title: `Image ${index + 1}`,
+            thumbnailUrl: `https://img.example.test/image-${index + 1}.jpg`,
+            url: `https://www.douban.com/game/21355730/photo/${index + 1}/`
+          }))
+        },
+        relatedSubjects: Array.from({ length: 5 }, (_, index) => ({
+          ...buildSubject("game", `26791${index}`, `Related ${index + 1}`),
+          metadata: {
+            类型: "游戏 / 角色扮演",
+            平台: "PC / PS5",
+            开发商: "CD Projekt RED",
+            发行日期: "2015-05-19"
+          }
+        }))
+      }),
+      {
+        authenticated: true,
+        user: {
+          id: "user-1",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        sessionStatus: {
+          status: "valid",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          ipLocation: null,
+          lastCheckedAt: new Date().toISOString(),
+          lastError: null
+        }
+      }
+    );
+
+    expect(await screen.findByText("玩过 · 4 星")).toBeInTheDocument();
+    expect(screen.getByText("Commenter")).toBeInTheDocument();
+    expect(screen.getByText("PC")).toBeInTheDocument();
+    expect(screen.getByText("2026-05-13")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "投票" })).toBeInTheDocument();
+
+    expect(screen.queryByText("Image 4")).not.toBeInTheDocument();
+    expect(screen.queryByText("Related 5")).not.toBeInTheDocument();
+
+    const moreButtons = screen.getAllByRole("button", { name: "查看更多" });
+    await user.click(moreButtons[0]!);
+    await user.click(moreButtons[1]!);
+
+    expect(screen.getByText("Image 4")).toBeInTheDocument();
+    expect(screen.getByText("Related 5")).toBeInTheDocument();
+    expect(screen.getAllByText("CD Projekt RED").length).toBeGreaterThan(0);
+  });
+
+  it("votes on a comment and updates the visible count", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "getAuthMe").mockResolvedValue({
+      authenticated: true,
+      user: {
+        id: "user-1",
+        peopleId: "demo-user",
+        displayName: "Demo User",
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      sessionStatus: {
+        status: "valid",
+        peopleId: "demo-user",
+        displayName: "Demo User",
+        avatarUrl: null,
+        ipLocation: null,
+        lastCheckedAt: new Date().toISOString(),
+        lastError: null
+      }
+    } satisfies AuthMeResponse);
+    vi.spyOn(api, "getSubjectDetail").mockResolvedValue(
+      buildDetailResponse("game", "21355730", "Game Demo", {
+        comments: [
+          {
+            id: "c1",
+            author: "Commenter",
+            authorUrl: null,
+            authorAvatarUrl: null,
+            userVoteState: "not_voted",
+            content: "Nice detail page",
+            rating: "推荐",
+            createdAt: "2026-05-13",
+            platform: "PC",
+            votes: 3
+          }
+        ]
+      })
+    );
+    vi.spyOn(api, "getSubjectComments").mockResolvedValue({
+      items: [],
+      start: 0,
+      nextStart: null,
+      hasMore: false
+    });
+    vi.spyOn(api, "voteSubjectComment").mockResolvedValue({
+      commentId: "c1",
+      votes: 4,
+      userVoteState: "voted"
+    });
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              queries: { retry: false },
+              mutations: { retry: false }
+            }
+          })
+        }
+      >
+        <MemoryRouter initialEntries={["/subject/game/21355730"]}>
+          <Routes>
+            <Route path="/subject/:medium/:doubanId" element={<SubjectDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const voteButton = await screen.findByRole("button", { name: "投票" });
+    expect(voteButton).toHaveTextContent("♡ 3");
+    await user.click(voteButton);
+    expect(await screen.findByRole("button", { name: "已投票" })).toHaveTextContent("♥ 4");
   });
 });

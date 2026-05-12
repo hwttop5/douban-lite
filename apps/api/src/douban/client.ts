@@ -1,4 +1,4 @@
-import type { Medium, RankingBoardConfig, RankingItem, ShelfStatus, SubjectCommentsResponse, SubjectRecord, TimelineScope } from "../../../../packages/shared/src";
+import type { Medium, RankingBoardConfig, RankingItem, ShelfStatus, SubjectComment, SubjectCommentsResponse, SubjectRecord, TimelineScope } from "../../../../packages/shared/src";
 import type { AppConfig } from "../config";
 import {
   parseAuthToken,
@@ -10,6 +10,7 @@ import {
   parsePeopleId,
   parseRanking,
   parseSearchResults,
+  parseSubjectCommentVoteAction,
   parseSubjectComments,
   parseSubjectDetail,
   parseSubjectDetailExtras,
@@ -25,9 +26,21 @@ interface PushStateInput {
   syncToTimeline?: boolean;
 }
 
+interface VoteResult {
+  commentId: string;
+  votes: number;
+  userVoteState: "voted" | "not_voted";
+}
+
+function readCookieValue(cookie: string, key: string) {
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${key}=([^;]+)`));
+  return match?.[1] ?? null;
+}
+
 export class DoubanClient {
   constructor(private readonly config: Pick<AppConfig, "doubanPublicBaseUrl" | "doubanWebBaseUrl">) {}
 
+  private readonly authorAvatarCache = new Map<string, string | null>();
   private readonly timelinePageSize = 20;
   private readonly userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -177,6 +190,34 @@ export class DoubanClient {
     return JSON.parse(text) as T;
   }
 
+  private async voteComment(url: string, commentId: string, cookie: string, referer: string): Promise<VoteResult> {
+    const authToken = readCookieValue(cookie, "ck");
+    if (!authToken) {
+      throw new Error("Douban session is missing ck token.");
+    }
+    const payload = await this.requestJson<{ msg?: string; r?: number; digg_n?: number }>(url, {
+      method: "POST",
+      headers: {
+        cookie,
+        referer,
+        "x-requested-with": "XMLHttpRequest",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      body: new URLSearchParams({
+        id: commentId,
+        ck: authToken
+      })
+    });
+    if (payload.r) {
+      throw new Error(payload.msg ?? "Douban comment vote failed.");
+    }
+    return {
+      commentId,
+      votes: payload.digg_n ?? 0,
+      userVoteState: /cancel_vote/.test(url) ? "not_voted" : "voted"
+    };
+  }
+
   private async readInterestSelection(medium: Medium, doubanId: string, detailUrl: string, cookie: string, fallbackHtml: string) {
     if (medium === "game") {
       return parseInterestSelection(fallbackHtml, detailUrl);
@@ -224,13 +265,47 @@ export class DoubanClient {
     return parseSearchResults(text, url, medium);
   }
 
+  private async resolveAuthorAvatar(authorUrl: string, cookie?: string) {
+    if (this.authorAvatarCache.has(authorUrl)) {
+      return this.authorAvatarCache.get(authorUrl) ?? null;
+    }
+    try {
+      const { text, url } = await this.request(authorUrl, cookie ? { headers: { cookie } } : undefined);
+      const avatarUrl = parseDoubanProfile(text, url).avatarUrl ?? null;
+      this.authorAvatarCache.set(authorUrl, avatarUrl);
+      return avatarUrl;
+    } catch {
+      this.authorAvatarCache.set(authorUrl, null);
+      return null;
+    }
+  }
+
+  private async enrichCommentAuthors(comments: SubjectComment[], cookie?: string) {
+    if (comments.length === 0) {
+      return comments;
+    }
+    const avatars = await Promise.all(
+      comments.map(async (comment) => {
+        if (!comment.authorUrl) {
+          return null;
+        }
+        return this.resolveAuthorAvatar(comment.authorUrl, cookie);
+      })
+    );
+    return comments.map((comment, index) => ({
+      ...comment,
+      authorAvatarUrl: comment.authorAvatarUrl ?? avatars[index] ?? null
+    }));
+  }
+
   async getSubjectDetail(medium: Medium, doubanId: string, cookie?: string) {
     const url = cookie ? this.authSubjectUrl(medium, doubanId) : this.publicSubjectUrl(medium, doubanId);
     const { text, url: finalUrl } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
     const subject = parseSubjectDetail(text, url, medium);
+    const comments = await this.enrichCommentAuthors(parseSubjectComments(text), cookie);
     return {
       subject,
-      comments: parseSubjectComments(text),
+      comments,
       extras: parseSubjectDetailExtras(text, url, medium, subject.doubanId),
       userSelection: cookie ? await this.readInterestSelection(medium, doubanId, finalUrl, cookie, text) : null
     };
@@ -252,13 +327,42 @@ export class DoubanClient {
         : `${this.authBaseUrl(medium)}/subject/${doubanId}/comments`;
     const url = `${baseUrl}?${params.toString()}`;
     const { text } = await this.request(url, cookie ? { headers: { cookie } } : undefined);
-    const items = parseSubjectComments(text, limit);
+    const items = await this.enrichCommentAuthors(parseSubjectComments(text, limit), cookie);
     return {
       items,
       start,
       nextStart: items.length > 0 ? start + items.length : null,
       hasMore: items.length >= limit
     };
+  }
+
+  async voteSubjectComment(medium: Medium, doubanId: string, commentId: string, cookie: string) {
+    const commentPageUrl =
+      medium === "game"
+        ? `${this.config.doubanWebBaseUrl}/game/${doubanId}/comments?comment_id=${encodeURIComponent(commentId)}`
+        : `${this.authBaseUrl(medium)}/subject/${doubanId}/comments?comment_id=${encodeURIComponent(commentId)}`;
+    const { text } = await this.request(commentPageUrl, {
+      headers: {
+        cookie,
+        referer: this.authSubjectUrl(medium, doubanId)
+      }
+    });
+    const action = parseSubjectCommentVoteAction(text, commentId);
+    if (!action) {
+      throw new Error("Unable to resolve Douban comment vote action.");
+    }
+    if (action.userVoteState === "voted") {
+      return {
+        commentId,
+        votes: action.votes,
+        userVoteState: action.userVoteState
+      } satisfies VoteResult;
+    }
+    const referer =
+      medium === "game"
+        ? `${this.config.doubanWebBaseUrl}/game/${doubanId}/comments`
+        : `${this.authBaseUrl(medium)}/subject/${doubanId}/comments`;
+    return this.voteComment(action.voteUrl, commentId, cookie, referer);
   }
 
   async getRanking(medium: Medium, board: RankingBoardConfig, cookie?: string) {

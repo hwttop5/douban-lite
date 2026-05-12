@@ -4,7 +4,15 @@ import express from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Express, Request, Response } from "express";
-import { importDoubanSessionSchema, mediumSchema, paginationSchema, shelfStatusSchema, timelineScopeSchema, updateLibraryStateSchema } from "../../../packages/shared/src";
+import {
+    importDoubanSessionSchema,
+  mediumSchema,
+  paginationSchema,
+  shelfStatusSchema,
+  subjectCommentVoteSchema,
+  timelineScopeSchema,
+  updateLibraryStateSchema
+} from "../../../packages/shared/src";
 import type { AppConfig } from "./config";
 import { loadConfig } from "./config";
 import { AppDatabase } from "./db";
@@ -39,7 +47,18 @@ function isAllowedImageUrl(url: URL) {
     return false;
   }
   const host = url.hostname.toLowerCase();
-  return host === "127.0.0.1" || host === "localhost" || host === "douban.com" || host.endsWith(".douban.com") || host === "doubanio.com" || host.endsWith(".doubanio.com");
+  return (
+    host === "127.0.0.1" ||
+    host === "localhost" ||
+    host === "douban.com" ||
+    host.endsWith(".douban.com") ||
+    host === "doubanio.com" ||
+    host.endsWith(".doubanio.com") ||
+    host === "hdslb.com" ||
+    host.endsWith(".hdslb.com") ||
+    host === "bilibili.com" ||
+    host.endsWith(".bilibili.com")
+  );
 }
 
 function allowedOrigins(origin: string | null) {
@@ -223,6 +242,27 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         return;
       }
       response.json(await sync.getSubjectComments(request.currentUserId ?? null, medium.data, routeParam(request.params.doubanId), Math.floor(start), Math.floor(limit)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/subjects/:medium/:doubanId/comments/vote", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    try {
+      const medium = mediumSchema.safeParse(request.params.medium);
+      const body = subjectCommentVoteSchema.safeParse(request.body);
+      if (!medium.success || !body.success) {
+        badRequest(response, "Invalid comment vote payload", {
+          medium: medium.success ? null : medium.error.flatten(),
+          body: body.success ? null : body.error.flatten()
+        });
+        return;
+      }
+      response.json(await sync.voteSubjectComment(userId, medium.data, routeParam(request.params.doubanId), body.data.commentId));
     } catch (error) {
       next(error);
     }

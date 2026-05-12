@@ -104,7 +104,8 @@ function absoluteUrl(baseUrl: string, maybeRelative: string | undefined | null) 
   if (!maybeRelative) {
     return null;
   }
-  const subjectTarget = decodedCandidates(maybeRelative)
+  const normalized = maybeRelative.startsWith("//") ? `https:${maybeRelative}` : maybeRelative;
+  const subjectTarget = decodedCandidates(normalized)
     .map((candidate) => {
       try {
         const url = new URL(candidate, baseUrl);
@@ -115,10 +116,37 @@ function absoluteUrl(baseUrl: string, maybeRelative: string | undefined | null) 
     })
     .find((candidate) => extractDoubanId(candidate));
   try {
-    return new URL(subjectTarget ?? maybeRelative, baseUrl).toString();
+    return new URL(subjectTarget ?? normalized, baseUrl).toString();
   } catch {
-    return subjectTarget ?? maybeRelative;
+    return subjectTarget ?? normalized;
   }
+}
+
+function ratingClassToLabel(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const className = value.match(/allstar(\d+)/)?.[1];
+  if (!className) {
+    return null;
+  }
+  const score = Number(className) / 10;
+  if (score >= 5) {
+    return "力荐";
+  }
+  if (score >= 4) {
+    return "推荐";
+  }
+  if (score >= 3) {
+    return "还行";
+  }
+  if (score >= 2) {
+    return "较差";
+  }
+  if (score >= 1) {
+    return "很差";
+  }
+  return null;
 }
 
 function parseCreators(raw: string | null) {
@@ -882,6 +910,19 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
   $(".comment-item, .comment-list li, .review-item").each((_, element) => {
     const root = $(element);
     const id = root.attr("data-cid") ?? root.attr("id") ?? null;
+    const authorLink = root.find(".comment-info a, .user-info a").first();
+    const platform = root
+      .find(".user-info > span")
+      .toArray()
+      .map((node) => $(node))
+      .map((node) => {
+        const className = node.attr("class") ?? "";
+        if (/pubtime|comment-location|allstar/i.test(className)) {
+          return null;
+        }
+        return safeText(node.text());
+      })
+      .find((value) => value != null) ?? null;
     const content = safeText(
       root
         .find(".comment-content .short, .comment-content, p .short, .info p .short, .comment p, .short")
@@ -898,14 +939,46 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
     seen.add(key);
     comments.push({
       id,
-      author: safeText(root.find(".comment-info a, .user-info a").first().text()),
+      author: safeText(authorLink.text()),
+      authorUrl: absoluteUrl("https://www.douban.com", authorLink.attr("href")),
+      authorAvatarUrl: null,
+      userVoteState: /cancel_vote/.test(root.find(".digg a").first().attr("href") ?? "") ? "voted" : "not_voted",
       content,
-      rating: safeText(root.find(".rating, .user-stars").first().attr("title") ?? null),
+      rating:
+        safeText(root.find(".rating, .user-stars").first().attr("title") ?? null) ??
+        ratingClassToLabel(root.find("[class*='allstar']").first().attr("class") ?? null),
       createdAt: safeText(root.find(".comment-time, .pubtime").first().text()),
+      platform,
       votes: Number(root.find(".vote-count, .votes, .digg span").first().text()) || null
     });
   });
   return comments.slice(0, limit);
+}
+
+export function parseSubjectCommentVoteAction(html: string, commentId: string) {
+  const $ = cheerio.load(html);
+  const root = $(`.comment-item[data-cid="${commentId}"], #${commentId}, .review-item[data-cid="${commentId}"]`).first();
+  if (root.length === 0) {
+    return null;
+  }
+  const voteLink = root.find(".digg a").first();
+  if (voteLink.length === 0) {
+    return null;
+  }
+  const href = absoluteUrl("https://www.douban.com", voteLink.attr("href"));
+  const dataHref = absoluteUrl("https://www.douban.com", voteLink.attr("data-href"));
+  const userVoteState = /cancel_vote/.test(href ?? "") ? "voted" : "not_voted";
+  const voteUrl = userVoteState === "voted" ? dataHref : href;
+  const cancelVoteUrl = userVoteState === "voted" ? href : dataHref;
+  if (!voteUrl) {
+    return null;
+  }
+  return {
+    voteUrl,
+    cancelVoteUrl: cancelVoteUrl ?? null,
+    userVoteState,
+    votes: Number(root.find(".vote-count, .votes, .digg span").first().text()) || 0
+  };
 }
 
 export function parseRanking(html: string, baseUrl: string, medium: Medium, board: RankingBoardConfig): RankingItem[] {

@@ -15,6 +15,7 @@ interface SubjectCardProps {
   subject: SubjectRecord;
   item?: Pick<LibraryEntry, "status" | "rating" | "syncState" | "errorMessage"> | null;
   extra?: React.ReactNode;
+  className?: string;
 }
 
 function renderSyncState(syncState: LibraryEntry["syncState"]) {
@@ -28,12 +29,11 @@ function renderSyncState(syncState: LibraryEntry["syncState"]) {
   }
 }
 
-export function SubjectCard({ medium, subject, item, extra }: SubjectCardProps) {
+export function SubjectCard({ medium, subject, item, extra, className = "subject-card" }: SubjectCardProps) {
   const location = useLocation();
   const externalUrl = typeof subject.metadata.externalUrl === "string" ? subject.metadata.externalUrl : null;
   const externalOnly = subject.metadata.externalOnly === "true";
   const coverUrl = proxiedImageUrl(subject.coverUrl);
-  const className = "subject-card";
   const detailState = location.pathname.startsWith("/rankings") || location.pathname.startsWith("/search") || location.pathname.startsWith("/me")
     ? { from: location.pathname }
     : undefined;

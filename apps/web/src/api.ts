@@ -9,6 +9,7 @@ import type {
   SearchResponse,
   ShelfStatus,
   SubjectCommentsResponse,
+  SubjectCommentVoteResponse,
   SubjectDetailResponse,
   SyncEventRecord,
   SyncJobRecord,
@@ -97,6 +98,13 @@ export function getSubjectComments(medium: Medium, doubanId: string, start = 0, 
     limit: String(limit)
   });
   return request<SubjectCommentsResponse>(`/api/subjects/${medium}/${doubanId}/comments?${params.toString()}`);
+}
+
+export function voteSubjectComment(medium: Medium, doubanId: string, commentId: string) {
+  return request<SubjectCommentVoteResponse>(`/api/subjects/${medium}/${doubanId}/comments/vote`, {
+    method: "POST",
+    body: JSON.stringify({ commentId })
+  });
 }
 
 export function getRanking(medium: Medium, board: string) {

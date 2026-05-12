@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import type { ShelfStatus, SubjectComment, SubjectMediaItem, SubjectSectionLink, UpdateLibraryStateInput } from "../../../../packages/shared/src";
+import type { ShelfStatus, SubjectComment, SubjectDetailResponse, SubjectMediaItem, SubjectSectionLink, UpdateLibraryStateInput } from "../../../../packages/shared/src";
 import { mediumLabels, mediumSchema, statusLabels } from "../../../../packages/shared/src";
-import { getAuthMe, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState } from "../api";
+import { getAuthMe, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState, voteSubjectComment } from "../api";
 import { CommentSkeletonList, DetailPageSkeleton, LoadingButtonLabel, LoadingInline } from "../components/loading-state";
 import { SubjectCard } from "../components/subject-card";
 import { useAutoLoadMore } from "../hooks/use-auto-load-more";
@@ -80,6 +80,39 @@ function renderMediaLabel(item: SubjectMediaItem) {
   return item.type === "video" ? "视频" : "图片";
 }
 
+function myRatingSummary(medium: ReturnType<typeof mediumSchema.parse>, item: NonNullable<ReturnType<typeof getVisibleUserItem>>) {
+  return `${statusLabels[medium][item.status]}${item.rating ? ` · ${item.rating} 星` : ""}`;
+}
+
+function metadataValue(subject: SubjectDetailResponse["subject"], key: string) {
+  const value = subject.metadata[key];
+  if (Array.isArray(value)) {
+    return value.join(" / ");
+  }
+  return typeof value === "string" ? value : null;
+}
+
+function buildRelatedMeta(subject: SubjectDetailResponse["subject"]) {
+  const values = [
+    subject.averageRating ? `豆瓣 ${subject.averageRating.toFixed(1)}` : "暂无豆瓣评分",
+    subject.year ? subject.year.replace(/[()]/g, "") : null,
+    metadataValue(subject, "类型"),
+    metadataValue(subject, "平台")
+  ].filter((value): value is string => Boolean(value));
+  return values.slice(0, 4);
+}
+
+function buildRelatedHighlights(subject: SubjectDetailResponse["subject"]) {
+  const values = [metadataValue(subject, "开发商"), metadataValue(subject, "发行商"), metadataValue(subject, "发行日期")]
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 3);
+  return values;
+}
+
+function getVisibleUserItem(userItem: SubjectDetailResponse["userItem"], hasDoubanSession: boolean) {
+  return hasDoubanSession ? userItem : null;
+}
+
 export function SubjectDetailPage() {
   const queryClient = useQueryClient();
   const params = useParams();
@@ -133,6 +166,34 @@ export function SubjectDetailPage() {
     }
   });
 
+  const voteMutation = useMutation({
+    mutationFn: (commentId: string) => voteSubjectComment(medium, doubanId, commentId),
+    onSuccess: (result) => {
+      const applyVote = (items: SubjectComment[]) =>
+        items.map((comment) =>
+          comment.id === result.commentId ? { ...comment, votes: result.votes, userVoteState: result.userVoteState } : comment
+        );
+      queryClient.setQueryData(["subject", medium, doubanId], (current: SubjectDetailResponse | undefined) =>
+        current
+          ? {
+              ...current,
+              comments: applyVote(current.comments)
+            }
+          : current
+      );
+      queryClient.setQueryData(
+        ["subject-comments", medium, doubanId, 0],
+        (current: { items: SubjectComment[]; start: number; nextStart: number | null; hasMore: boolean } | undefined) =>
+          current
+            ? {
+                ...current,
+                items: applyVote(current.items)
+              }
+            : current
+      );
+    }
+  });
+
   const mutation = useMutation({
     mutationFn: (input: UpdateLibraryStateInput) => updateLibraryState(medium, doubanId, input),
     onSuccess: async () => {
@@ -161,10 +222,10 @@ export function SubjectDetailPage() {
     }
   });
   const coverUrl = proxiedImageUrl(subject?.coverUrl);
-  const hasDoubanSession = sessionQuery.data?.authenticated && sessionQuery.data?.sessionStatus.status === "valid";
+  const hasDoubanSession = Boolean(sessionQuery.data?.authenticated && sessionQuery.data?.sessionStatus.status === "valid");
   const sessionPending = sessionQuery.isPending;
   const showCommentSkeleton = commentsQuery.isFetching && comments.length === 0;
-  const visibleUserItem = hasDoubanSession ? userItem : null;
+  const visibleUserItem = getVisibleUserItem(userItem ?? null, hasDoubanSession);
   const currentStatus = visibleUserItem?.status ?? "wish";
   const currentRating = visibleUserItem?.rating ?? null;
   const sectionLinks = sectionLinkMap(detailQuery.data?.sectionLinks);
@@ -173,6 +234,13 @@ export function SubjectDetailPage() {
   const trackList = detailQuery.data?.trackList ?? [];
   const tableOfContents = detailQuery.data?.tableOfContents ?? [];
   const relatedSubjects = detailQuery.data?.relatedSubjects ?? [];
+  const mediaItems = [...media.videos, ...media.images];
+  const [visibleMediaCount, setVisibleMediaCount] = useState(6);
+  const [visibleRelatedCount, setVisibleRelatedCount] = useState(4);
+  const visibleMediaItems = mediaItems.slice(0, visibleMediaCount);
+  const visibleRelatedSubjects = relatedSubjects.slice(0, visibleRelatedCount);
+  const hasMoreMediaItems = visibleMediaCount < mediaItems.length;
+  const hasMoreRelatedSubjects = visibleRelatedCount < relatedSubjects.length;
   const openMarkDialog = (input: { status: ShelfStatus; rating: number | null }) => {
     if (!hasDoubanSession) {
       setLoginMessage("请先登录豆瓣后再标记和评分。");
@@ -323,6 +391,14 @@ export function SubjectDetailPage() {
                 </button>
               ))}
             </div>
+            {visibleUserItem ? (
+              <div className="detail-my-rating__summary">
+                <strong>{myRatingSummary(medium, visibleUserItem)}</strong>
+                {visibleUserItem.tags.length > 0 ? <span>{visibleUserItem.tags.join(" · ")}</span> : null}
+              </div>
+            ) : (
+              <p className="detail-my-rating__placeholder">登录后可以同步你的标记、评分和短评。</p>
+            )}
             {visibleUserItem?.comment ? (
               <div className="detail-my-rating__comment">
                 <span>我的短评</span>
@@ -417,21 +493,9 @@ export function SubjectDetailPage() {
         <section className="detail-section">
           <div className="detail-section__header">
             <h2>视频 / 图片</h2>
-            <div className="detail-section__actions">
-              {sectionLinks.get("videos") ? (
-                <a href={sectionLinks.get("videos")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
-                  全部视频
-                </a>
-              ) : null}
-              {sectionLinks.get("images") ? (
-                <a href={sectionLinks.get("images")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
-                  全部图片
-                </a>
-              ) : null}
-            </div>
           </div>
           <div className="detail-media-grid">
-            {[...media.videos, ...media.images].map((item) => {
+            {visibleMediaItems.map((item) => {
               const thumbnailUrl = proxiedImageUrl(item.thumbnailUrl);
               return (
                 <a key={item.url} href={item.url} target="_blank" rel="noreferrer" className="detail-media-card">
@@ -446,6 +510,13 @@ export function SubjectDetailPage() {
               );
             })}
           </div>
+          {hasMoreMediaItems ? (
+            <div className="detail-section__footer">
+              <button type="button" className="detail-more-button" onClick={() => setVisibleMediaCount((count) => count + 6)}>
+                查看更多
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -453,17 +524,44 @@ export function SubjectDetailPage() {
         <section className="detail-section">
           <div className="detail-section__header">
             <h2>{relatedTitle(medium)}</h2>
-            {sectionLinks.get("related") ? (
-              <a href={sectionLinks.get("related")!.url} target="_blank" rel="noreferrer" className="detail-section__link">
-                查看全部
-              </a>
-            ) : null}
           </div>
           <div className="detail-related-grid">
-            {relatedSubjects.map((item) => (
-              <SubjectCard key={`${item.medium}-${item.doubanId}`} medium={medium} subject={item} />
+            {visibleRelatedSubjects.map((item) => (
+              <SubjectCard
+                key={`${item.medium}-${item.doubanId}`}
+                medium={medium}
+                subject={item}
+                className="subject-card subject-card--related"
+                extra={
+                  <div className="subject-card__extra">
+                    <div className="subject-card__meta-list">
+                      {buildRelatedMeta(item).map((value) => (
+                        <span key={value} className="subject-card__meta-chip">
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                    {buildRelatedHighlights(item).length > 0 ? (
+                      <div className="subject-card__facts">
+                        {buildRelatedHighlights(item).map((value, index) => (
+                          <p key={`${item.doubanId}-fact-${index}`}>{value}</p>
+                        ))}
+                      </div>
+                    ) : item.summary ? (
+                      <p className="subject-card__summary">{item.summary}</p>
+                    ) : null}
+                  </div>
+                }
+              />
             ))}
           </div>
+          {hasMoreRelatedSubjects ? (
+            <div className="detail-section__footer">
+              <button type="button" className="detail-more-button" onClick={() => setVisibleRelatedCount((count) => count + 4)}>
+                查看更多
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -481,16 +579,36 @@ export function SubjectDetailPage() {
             {comments.map((comment, index) => (
               <article className="comment-card" key={comment.id ?? `${comment.author}-${index}`}>
                 <div className="comment-card__meta">
-                  <span className="comment-card__avatar">{comment.author?.slice(0, 1) ?? "豆"}</span>
-                  <div>
+                  {comment.authorAvatarUrl ? (
+                    <img className="comment-card__avatar" src={proxiedImageUrl(comment.authorAvatarUrl) ?? comment.authorAvatarUrl} alt={comment.author ?? "豆瓣用户"} loading="lazy" />
+                  ) : (
+                    <span className="comment-card__avatar">{comment.author?.slice(0, 1) ?? "豆"}</span>
+                  )}
+                  <div className="comment-card__identity">
                     <strong>{comment.author ?? "豆瓣用户"}</strong>
-                    {renderStars(ratingLabelToScore(comment.rating))}
-                    {comment.createdAt ? <time>{comment.createdAt}</time> : comment.rating ? <time>{comment.rating}</time> : null}
+                    <div className="comment-card__submeta">
+                      {renderStars(ratingLabelToScore(comment.rating))}
+                      {comment.platform ? <span className="comment-card__platform">{comment.platform}</span> : null}
+                    </div>
+                    {comment.createdAt ? <time>{comment.createdAt}</time> : null}
                   </div>
-                  <button type="button" aria-label="更多">•••</button>
                 </div>
                 <p>{comment.content}</p>
-                {comment.votes ? <span className="comment-card__votes">♡ {comment.votes}</span> : null}
+                {comment.votes != null ? (
+                  hasDoubanSession && comment.id ? (
+                    <button
+                      type="button"
+                      className={`comment-card__votes comment-card__votes--button${comment.userVoteState === "voted" ? " is-active" : ""}`}
+                      disabled={voteMutation.isPending}
+                      onClick={() => voteMutation.mutate(comment.id!)}
+                      aria-label={comment.userVoteState === "voted" ? "已投票" : "投票"}
+                    >
+                      {comment.userVoteState === "voted" ? "♥" : "♡"} {comment.votes}
+                    </button>
+                  ) : (
+                    <span className="comment-card__votes">♡ {comment.votes}</span>
+                  )
+                ) : null}
               </article>
             ))}
           </div>
@@ -499,6 +617,7 @@ export function SubjectDetailPage() {
         ) : (
           <p className="empty-state">暂时没有解析到公开短评。</p>
         )}
+        {voteMutation.error ? <p className="form-error">{voteMutation.error.message}</p> : null}
         {loadMoreMutation.error ? <p className="form-error">{loadMoreMutation.error.message}</p> : null}
         {hasMore && nextStart != null ? <div ref={commentsAutoLoadRef} className="auto-load-sentinel" aria-hidden="true" /> : null}
         {loadMoreMutation.isPending ? <p className="auto-load-status"><LoadingInline label="正在补充更多短评" tone="soft" /></p> : null}

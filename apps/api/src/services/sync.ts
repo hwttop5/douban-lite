@@ -8,6 +8,7 @@ import type {
   RankingResponse,
   SearchResponse,
   ShelfStatus,
+  SubjectCommentVoteResponse,
   SubjectCommentsResponse,
   SubjectDetailResponse,
   SyncJobRecord,
@@ -23,6 +24,7 @@ import { DoubanClient, DoubanSessionError } from "../douban/client";
 import { decryptText, encryptText, hashSessionToken } from "../security";
 
 const RANKING_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const RELATED_SUBJECT_ENRICH_LIMIT = 8;
 
 function nowIso() {
   return new Date().toISOString();
@@ -39,6 +41,31 @@ function emptySubjectDetailExtras(): Pick<SubjectDetailResponse, "staff" | "medi
     tableOfContents: [],
     relatedSubjects: [],
     sectionLinks: []
+  };
+}
+
+function hasRichSubjectFields(subject: SubjectDetailResponse["subject"]) {
+  return Boolean(
+    subject.subtitle ||
+    subject.year ||
+    subject.summary ||
+    subject.creators.length > 0 ||
+    Object.keys(subject.metadata).some((key) => key !== "externalUrl" && key !== "board")
+  );
+}
+
+function mergeSubjectRecords(base: SubjectDetailResponse["subject"], incoming: SubjectDetailResponse["subject"]) {
+  const hasIncomingMetadata = Object.keys(incoming.metadata).some((key) => key !== "externalUrl");
+  return {
+    ...base,
+    ...incoming,
+    subtitle: incoming.subtitle ?? base.subtitle,
+    year: incoming.year ?? base.year,
+    coverUrl: incoming.coverUrl ?? base.coverUrl,
+    averageRating: incoming.averageRating ?? base.averageRating,
+    summary: incoming.summary ?? base.summary,
+    creators: incoming.creators.length > 0 ? incoming.creators : base.creators,
+    metadata: hasIncomingMetadata ? incoming.metadata : { ...base.metadata, ...incoming.metadata }
   };
 }
 
@@ -180,18 +207,19 @@ export class SyncService {
     let comments: SubjectDetailResponse["comments"] = [];
     let extras = emptySubjectDetailExtras();
     let remoteComment: string | null = null;
-    if (session?.cookie || !subject) {
-      try {
-        const detail = await this.client.getSubjectDetail(medium, doubanId, session?.cookie);
-        this.db.upsertSubject(detail.subject);
-        subject = this.db.getSubject(medium, doubanId) ?? detail.subject;
-        comments = detail.comments;
-        extras = detail.extras;
-        remoteComment = detail.userSelection?.comment ?? null;
-      } catch (error) {
-        if (!subject) {
-          throw error;
-        }
+    try {
+      const detail = await this.client.getSubjectDetail(medium, doubanId, session?.cookie);
+      this.db.upsertSubject(detail.subject);
+      subject = this.db.getSubject(medium, doubanId) ?? detail.subject;
+      comments = detail.comments;
+      extras = {
+        ...detail.extras,
+        relatedSubjects: await this.enrichRelatedSubjects(detail.extras.relatedSubjects, session?.cookie)
+      };
+      remoteComment = detail.userSelection?.comment ?? null;
+    } catch (error) {
+      if (!subject) {
+        throw error;
       }
     }
     const storedUserItem = userId ? this.db.getUserItem(userId, medium, doubanId) : null;
@@ -213,6 +241,32 @@ export class SyncService {
   async getSubjectComments(userId: string | null, medium: Medium, doubanId: string, start: number, limit: number): Promise<SubjectCommentsResponse> {
     const session = userId ? this.getDoubanCookie(userId) : null;
     return this.client.getSubjectComments(medium, doubanId, start, limit, session?.cookie);
+  }
+
+  async voteSubjectComment(userId: string, medium: Medium, doubanId: string, commentId: string): Promise<SubjectCommentVoteResponse> {
+    const session = this.requireDoubanSession(userId);
+    return this.client.voteSubjectComment(medium, doubanId, commentId, session.cookie);
+  }
+
+  private async enrichRelatedSubjects(subjects: SubjectDetailResponse["relatedSubjects"], cookie?: string) {
+    return Promise.all(
+      subjects.map(async (subject, index) => {
+        const cached = this.db.getSubject(subject.medium, subject.doubanId);
+        if (cached && hasRichSubjectFields(cached)) {
+          return mergeSubjectRecords(subject, cached);
+        }
+        if (index >= RELATED_SUBJECT_ENRICH_LIMIT) {
+          return cached ? mergeSubjectRecords(subject, cached) : subject;
+        }
+        try {
+          const detail = await this.client.getSubjectDetail(subject.medium, subject.doubanId, cookie);
+          this.db.upsertSubject(detail.subject);
+          return mergeSubjectRecords(subject, detail.subject);
+        } catch {
+          return cached ? mergeSubjectRecords(subject, cached) : subject;
+        }
+      })
+    );
   }
 
   async getRanking(userId: string | null, medium: Medium, boardKey: string): Promise<RankingResponse> {

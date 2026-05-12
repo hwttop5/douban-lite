@@ -277,7 +277,17 @@ describe("Douban parsers", () => {
     );
 
     expect(comments).toHaveLength(2);
-    expect(comments[0]).toMatchObject({ id: "c1", author: "用户 A", content: "第一条短评。", rating: "力荐", votes: 12 });
+    expect(comments[0]).toMatchObject({
+      id: "c1",
+      author: "用户 A",
+      authorUrl: null,
+      authorAvatarUrl: null,
+      userVoteState: "not_voted",
+      content: "第一条短评。",
+      rating: "力荐",
+      platform: null,
+      votes: 12
+    });
   });
 
   it("parses profile name and avatar without edit controls", () => {

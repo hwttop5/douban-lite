@@ -56,9 +56,13 @@ export interface SubjectRecord {
 export interface SubjectComment {
   id: string | null;
   author: string | null;
+  authorUrl: string | null;
+  authorAvatarUrl: string | null;
+  userVoteState: "voted" | "not_voted" | null;
   content: string;
   rating: string | null;
   createdAt: string | null;
+  platform: string | null;
   votes: number | null;
 }
 
@@ -204,6 +208,12 @@ export interface SubjectCommentsResponse {
   hasMore: boolean;
 }
 
+export interface SubjectCommentVoteResponse {
+  commentId: string;
+  votes: number;
+  userVoteState: "voted" | "not_voted";
+}
+
 export interface RankingBoardConfig {
   key: string;
   name: string;
@@ -296,6 +306,10 @@ export const updateLibraryStateSchema = z.object({
   comment: z.string().trim().max(140).optional(),
   tags: z.array(z.string().trim().min(1).max(20)).max(12).optional(),
   syncToTimeline: z.boolean().optional()
+});
+
+export const subjectCommentVoteSchema = z.object({
+  commentId: z.string().trim().min(1)
 });
 
 export type UpdateLibraryStateInput = z.infer<typeof updateLibraryStateSchema>;
