@@ -36,9 +36,9 @@ function createTimelineItem(overrides: Partial<TimelineItem> = {}): TimelineItem
   };
 }
 
-function mockAuth() {
+function mockAuth(status: AuthMeResponse["sessionStatus"]["status"] = "valid") {
   vi.spyOn(api, "getAuthMe").mockResolvedValue({
-    authenticated: true,
+    authenticated: status === "valid",
     user: {
       id: "user-1",
       peopleId: "demo-user",
@@ -49,7 +49,7 @@ function mockAuth() {
       updatedAt: new Date().toISOString()
     },
     sessionStatus: {
-      status: "valid",
+      status,
       peopleId: "demo-user",
       displayName: "Demo",
       avatarUrl: null,
@@ -60,14 +60,14 @@ function mockAuth() {
   } satisfies AuthMeResponse);
 }
 
-function renderPage(items: TimelineItem[]) {
+function renderPage(items: TimelineItem[], options: { stale?: boolean } = {}) {
   vi.spyOn(api, "getTimeline").mockResolvedValue({
     scope: "following",
     start: 0,
     nextStart: null,
     hasMore: false,
     fetchedAt: new Date().toISOString(),
-    stale: false,
+    stale: options.stale ?? false,
     items
   } satisfies TimelineResponse);
 
@@ -193,6 +193,18 @@ describe("TimelinePage", () => {
       expect(api.repostTimelineStatus).toHaveBeenCalledWith("status-repost", "https://www.douban.com/people/ttop5/status/status-1/", undefined);
     });
     expect(await screen.findByRole("button", { name: "\u8f6c\u53d1 (1)" })).toBeInTheDocument();
+  });
+
+  it("disables timeline actions when the page is showing stale cached data", async () => {
+    mockAuth();
+    renderPage([createTimelineItem()], { stale: true });
+
+    expect(
+      await screen.findByText("\u5b9e\u65f6\u6293\u53d6\u5931\u8d25\uff0c\u5f53\u524d\u663e\u793a\u7684\u662f\u7f13\u5b58\u52a8\u6001\u3002\u8d5e\u3001\u56de\u590d\u548c\u8f6c\u53d1\u5df2\u7981\u7528\uff0c\u8bf7\u91cd\u65b0\u5bfc\u5165\u6709\u6548\u7684\u8c46\u74e3 Cookie \u540e\u91cd\u8bd5\u3002")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "\u8d5e (6)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "\u56de\u590d (1)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "\u8f6c\u53d1 (0)" })).toBeDisabled();
   });
 
   it("routes game timeline subjects to the local detail page", async () => {

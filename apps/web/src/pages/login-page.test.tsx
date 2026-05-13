@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AuthMeResponse, DoubanProxyLoginConfigResponse } from "../../../../packages/shared/src";
+import type {
+  AuthMeResponse,
+  DoubanProxyLoginConfigResponse,
+  DoubanProxyLoginStatusResponse,
+  DoubanProxyLoginSubmitResponse
+} from "../../../../packages/shared/src";
 import * as api from "../api";
 import { LoginPage } from "./login-page";
 
@@ -17,7 +22,7 @@ const defaultProxyConfig: DoubanProxyLoginConfigResponse = {
     }
   ],
   defaultCountryCode: "CN",
-  availableModes: ["sms", "password"]
+  availableModes: ["qr", "sms", "password"]
 };
 
 function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"]): AuthMeResponse {
@@ -60,15 +65,118 @@ function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"])
   };
 }
 
+function createProxyAttemptResult(overrides: Partial<DoubanProxyLoginStatusResponse> = {}): DoubanProxyLoginStatusResponse {
+  return {
+    loginAttemptId: "attempt-1",
+    status: "created",
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    nextAction: "start_qr",
+    verificationMethod: "none",
+    maskedTarget: null,
+    retryAfterSeconds: null,
+    pollIntervalSeconds: null,
+    qrCode: null,
+    qrCodeImageUrl: null,
+    qrStatus: null,
+    availableFallbacks: ["cookie_import"],
+    errorCode: null,
+    message: null,
+    ...overrides
+  };
+}
+
+function createQrStartResult(overrides: Partial<DoubanProxyLoginStatusResponse> = {}): DoubanProxyLoginStatusResponse {
+  return createProxyAttemptResult({
+    nextAction: "poll_qr_status",
+    verificationMethod: "qr",
+    pollIntervalSeconds: 30,
+    qrCode: "qr-code-1",
+    qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-1.png",
+    qrStatus: "pending",
+    message: "请打开豆瓣 App 扫码登录。",
+    ...overrides
+  });
+}
+
+function createQrStatusResult(overrides: Partial<DoubanProxyLoginSubmitResponse> = {}): DoubanProxyLoginSubmitResponse {
+  return {
+    ...createQrStartResult(),
+    ...overrides
+  };
+}
+
+function createClaimedQrResult(overrides: Partial<DoubanProxyLoginSubmitResponse> = {}): DoubanProxyLoginSubmitResponse {
+  return {
+    ...createQrStartResult({
+      status: "claimed",
+      nextAction: "none",
+      qrStatus: "login",
+      message: "登录成功。"
+    }),
+    user: {
+      id: "user-1",
+      peopleId: "demo-user",
+      displayName: "Demo",
+      avatarUrl: null,
+      ipLocation: "Shanghai",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    sessionStatus: {
+      status: "valid",
+      peopleId: "demo-user",
+      displayName: "Demo",
+      avatarUrl: null,
+      ipLocation: "Shanghai",
+      lastCheckedAt: null,
+      lastError: null
+    },
+    ...overrides
+  };
+}
+
+function mockSequentialResult<T>(values: T[]) {
+  const queue = [...values];
+  return async () => {
+    const next = queue[0];
+    if (queue.length > 1) {
+      queue.shift();
+    }
+    return next;
+  };
+}
+
 function renderLoginPage({
   initialEntry = "/login",
-  authMe = createAuthMeResponse("missing")
+  authMe = createAuthMeResponse("missing"),
+  proxyConfig = defaultProxyConfig,
+  sendSmsResult,
+  qrStartResults = [createQrStartResult()],
+  qrStatusResults = [createQrStatusResult()]
 }: {
   initialEntry?: string;
   authMe?: AuthMeResponse;
+  proxyConfig?: DoubanProxyLoginConfigResponse;
+  sendSmsResult?: DoubanProxyLoginStatusResponse;
+  qrStartResults?: DoubanProxyLoginStatusResponse[];
+  qrStatusResults?: DoubanProxyLoginSubmitResponse[];
 } = {}) {
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
-  vi.spyOn(api, "getDoubanProxyLoginConfig").mockResolvedValue(defaultProxyConfig);
+  vi.spyOn(api, "getDoubanProxyLoginConfig").mockResolvedValue(proxyConfig);
+  vi.spyOn(api, "startDoubanProxyLogin").mockResolvedValue(createProxyAttemptResult());
+  const qrStartSpy = vi.spyOn(api, "startDoubanProxyQrLogin").mockImplementation(mockSequentialResult(qrStartResults));
+  vi.spyOn(api, "getDoubanProxyLoginStatus").mockImplementation(mockSequentialResult(qrStatusResults));
+  vi.spyOn(api, "sendDoubanProxySmsCode").mockResolvedValue(
+    sendSmsResult ??
+      createProxyAttemptResult({
+        status: "needs_verification",
+        nextAction: "enter_sms_code",
+        verificationMethod: "sms",
+        maskedTarget: "+86 138****8000",
+        retryAfterSeconds: 60,
+        message: "验证码已发送至 +86 138****8000。"
+      })
+  );
   vi.spyOn(api, "importDoubanSession").mockResolvedValue({
     user: {
       id: "user-1",
@@ -101,6 +209,8 @@ function renderLoginPage({
       </MemoryRouter>
     </QueryClientProvider>
   );
+
+  return { qrStartSpy };
 }
 
 afterEach(() => {
@@ -109,15 +219,21 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  it("defaults to the SMS tab and allows switching across all three login methods", async () => {
+  it("shows QR login as the primary entry and keeps the secondary tabs switchable", async () => {
     renderLoginPage();
 
-    expect(await screen.findByRole("tab", { name: "短信验证登录" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("二维码登录")).toBeInTheDocument();
+    expect(await screen.findByAltText("豆瓣登录二维码")).toBeInTheDocument();
     expect(screen.getByText("登录连接到豆瓣。")).toBeInTheDocument();
-    expect(screen.getByText("遇到风控或异常时，请改用导入 Cookie 登录。")).toBeInTheDocument();
+    expect(screen.getByText("请打开豆瓣 App 扫码登录。")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "短信验证登录" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "账号密码登录" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "导入 Cookie 登录" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("输入手机号")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("输入 6 位验证码")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("输入 6 位验证码").closest(".settings-code-row__control")?.contains(screen.getByRole("button", { name: "发送 SMS 验证码" }))
+    ).toBe(true);
 
     fireEvent.click(screen.getByRole("tab", { name: "账号密码登录" }));
     expect(screen.getByRole("tab", { name: "账号密码登录" })).toHaveAttribute("aria-selected", "true");
@@ -129,6 +245,80 @@ describe("LoginPage", () => {
     expect(screen.getByRole("tab", { name: "导入 Cookie 登录" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("Cookie")).toBeInTheDocument();
     expect(screen.getByText("如何获取 Cookie 并在 PWA 里登录")).toBeInTheDocument();
+  });
+
+  it("shows QR expiry feedback and allows refreshing the code", async () => {
+    const { qrStartSpy } = renderLoginPage({
+      qrStartResults: [
+        createQrStartResult({
+          pollIntervalSeconds: 1,
+          qrCode: "qr-code-1",
+          qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-1.png"
+        }),
+        createQrStartResult({
+          pollIntervalSeconds: 1,
+          qrCode: "qr-code-2",
+          qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-2.png"
+        })
+      ],
+      qrStatusResults: [
+        createQrStatusResult({
+          status: "expired",
+          nextAction: "start_qr",
+          qrStatus: "invalid",
+          errorCode: "qr_expired",
+          message: "二维码已失效，请重新获取。",
+          pollIntervalSeconds: 1
+        }),
+        createQrStatusResult({
+          qrCode: "qr-code-2",
+          qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-2.png",
+          pollIntervalSeconds: 1
+        })
+      ]
+    });
+
+    const qrImage = await screen.findByAltText("豆瓣登录二维码");
+    expect(qrImage.getAttribute("src")).toContain(encodeURIComponent("https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-1.png"));
+
+    expect(await screen.findByText("二维码已失效，请重新获取。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新二维码" }));
+
+    await waitFor(() => {
+      expect(qrStartSpy).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.getByAltText("豆瓣登录二维码").getAttribute("src")).toContain(
+        encodeURIComponent("https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-2.png")
+      );
+    });
+  });
+
+  it("redirects after QR login succeeds", async () => {
+    renderLoginPage({
+      qrStartResults: [
+        createQrStartResult({
+          pollIntervalSeconds: 1
+        })
+      ],
+      qrStatusResults: [
+        createQrStatusResult({
+          status: "needs_verification",
+          nextAction: "poll_qr_status",
+          qrStatus: "scan",
+          message: "扫码成功，请在手机上确认登录。",
+          pollIntervalSeconds: 1
+        }),
+        createClaimedQrResult()
+      ]
+    });
+
+    expect(await screen.findByAltText("豆瓣登录二维码")).toBeInTheDocument();
+    expect(await screen.findByText("扫码成功，请在手机上确认登录。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("已回到我的")).toBeInTheDocument();
+    }, { timeout: 3000 });
   });
 
   it("keeps the login methods visible even when the current session is already valid", async () => {
@@ -171,5 +361,26 @@ describe("LoginPage", () => {
     await waitFor(() => {
       expect(screen.getByText("已回到我的")).toBeInTheDocument();
     });
+  });
+
+  it("shows captcha fallback as a warning notice instead of an error", async () => {
+    renderLoginPage({
+      sendSmsResult: createProxyAttemptResult({
+        status: "blocked",
+        nextAction: "use_cookie_import",
+        verificationMethod: "captcha",
+        errorCode: "needs_captcha",
+        message: "豆瓣要求图形验证，请改用 Cookie 导入。"
+      })
+    });
+
+    fireEvent.change(await screen.findByPlaceholderText("输入手机号"), {
+      target: { value: "13800138000" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送 SMS 验证码" }));
+
+    const warning = await screen.findByText("豆瓣要求图形验证，请改用 Cookie 导入。");
+    expect(warning).toHaveClass("notice");
+    expect(warning).not.toHaveClass("form-error");
   });
 });

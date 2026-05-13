@@ -251,17 +251,17 @@ export class SyncService {
 
   async likeTimelineStatus(userId: string, statusId: string, detailUrl: string): Promise<TimelineActionResponse> {
     const session = this.requireDoubanSession(userId);
-    return this.client.likeTimelineStatus(statusId, detailUrl, session.cookie);
+    return this.runTimelineAction(userId, () => this.client.likeTimelineStatus(statusId, detailUrl, session.cookie));
   }
 
   async replyTimelineStatus(userId: string, statusId: string, detailUrl: string, text: string): Promise<TimelineActionResponse> {
     const session = this.requireDoubanSession(userId);
-    return this.client.replyTimelineStatus(statusId, detailUrl, text, session.cookie);
+    return this.runTimelineAction(userId, () => this.client.replyTimelineStatus(statusId, detailUrl, text, session.cookie));
   }
 
   async repostTimelineStatus(userId: string, statusId: string, detailUrl: string, text?: string): Promise<TimelineActionResponse> {
     const session = this.requireDoubanSession(userId);
-    return this.client.repostTimelineStatus(statusId, detailUrl, text, session.cookie);
+    return this.runTimelineAction(userId, () => this.client.repostTimelineStatus(statusId, detailUrl, text, session.cookie));
   }
 
   private async enrichRelatedSubjects(subjects: SubjectDetailResponse["relatedSubjects"], cookie?: string) {
@@ -324,6 +324,7 @@ export class SyncService {
       }
       return { scope, ...page, fetchedAt, stale: false };
     } catch (error) {
+      this.handleTimelineSessionError(userId, error);
       const cached = start === 0 ? this.db.getTimelineSnapshot(userId, scope) : null;
       if (cached) {
         return { ...cached, stale: true };
@@ -432,6 +433,25 @@ export class SyncService {
       throw new Error("Please log in to Douban first.");
     }
     return session;
+  }
+
+  private handleTimelineSessionError(userId: string, error: unknown) {
+    if (!(error instanceof DoubanSessionError)) {
+      return;
+    }
+    this.db.updateDoubanSessionStatus(userId, "invalid", error.message);
+  }
+
+  private async runTimelineAction<T>(userId: string, action: () => Promise<T>) {
+    try {
+      return await action();
+    } catch (error) {
+      this.handleTimelineSessionError(userId, error);
+      if (error instanceof DoubanSessionError) {
+        throw new DoubanSessionError("豆瓣登录已失效或触发校验，请重新导入 Cookie 后重试。");
+      }
+      throw error;
+    }
   }
 
   private async enqueueScheduledJobs() {

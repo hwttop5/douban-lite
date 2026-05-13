@@ -18,12 +18,60 @@ const defaultProxyConfig: DoubanProxyLoginConfigResponse = {
     }
   ],
   defaultCountryCode: "CN",
-  availableModes: ["sms", "password"]
+  availableModes: ["qr", "sms", "password"]
 };
 
 function renderApp(authMe: AuthMeResponse) {
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
   vi.spyOn(api, "getDoubanProxyLoginConfig").mockResolvedValue(defaultProxyConfig);
+  vi.spyOn(api, "startDoubanProxyLogin").mockResolvedValue({
+    loginAttemptId: "attempt-1",
+    status: "created",
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    nextAction: "start_qr",
+    verificationMethod: "none",
+    maskedTarget: null,
+    retryAfterSeconds: null,
+    pollIntervalSeconds: null,
+    qrCode: null,
+    qrCodeImageUrl: null,
+    qrStatus: null,
+    availableFallbacks: ["cookie_import"],
+    errorCode: null,
+    message: null
+  });
+  vi.spyOn(api, "startDoubanProxyQrLogin").mockResolvedValue({
+    loginAttemptId: "attempt-1",
+    status: "created",
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    nextAction: "poll_qr_status",
+    verificationMethod: "qr",
+    maskedTarget: null,
+    retryAfterSeconds: null,
+    pollIntervalSeconds: 30,
+    qrCode: "qr-code-1",
+    qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-1.png",
+    qrStatus: "pending",
+    availableFallbacks: ["cookie_import"],
+    errorCode: null,
+    message: "请打开豆瓣 App 扫码登录。"
+  });
+  vi.spyOn(api, "getDoubanProxyLoginStatus").mockResolvedValue({
+    loginAttemptId: "attempt-1",
+    status: "created",
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    nextAction: "poll_qr_status",
+    verificationMethod: "qr",
+    maskedTarget: null,
+    retryAfterSeconds: null,
+    pollIntervalSeconds: 30,
+    qrCode: "qr-code-1",
+    qrCodeImageUrl: "https://img1.doubanio.com/view/douban_qr_login/raw/public/qr-code-1.png",
+    qrStatus: "pending",
+    availableFallbacks: ["cookie_import"],
+    errorCode: null,
+    message: "请打开豆瓣 App 扫码登录。"
+  });
 
   render(
     <QueryClientProvider client={new QueryClient()}>

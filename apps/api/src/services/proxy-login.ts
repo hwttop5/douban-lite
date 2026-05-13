@@ -4,6 +4,7 @@ import type {
   DoubanProxyLoginFallback,
   DoubanProxyLoginMode,
   DoubanProxyLoginNextAction,
+  DoubanProxyQrStatus,
   DoubanProxyLoginStatus,
   DoubanProxyLoginStatusResponse,
   DoubanProxyVerificationMethod,
@@ -28,9 +29,13 @@ interface LoginAttempt {
   verificationMethod: DoubanProxyVerificationMethod;
   maskedTarget: string | null;
   resendAvailableAt: Date | null;
+  pollIntervalSeconds: number | null;
   phoneNumber: string | null;
   country: DoubanSupportedCountry;
   mode: DoubanProxyLoginMode | null;
+  qrCode: string | null;
+  qrCodeImageUrl: string | null;
+  qrStatus: DoubanProxyQrStatus | null;
 }
 
 interface CookieCarrier {
@@ -55,6 +60,10 @@ interface VerifySmsInput {
   smsCode: string;
 }
 
+interface StartQrInput {
+  loginAttemptId: string;
+}
+
 interface SubmitResult extends DoubanProxyLoginStatusResponse {
   cookie?: string;
 }
@@ -76,6 +85,7 @@ interface ParsedLoginResponse {
 const COOKIE_IMPORT_FALLBACKS: DoubanProxyLoginFallback[] = ["cookie_import"];
 const LOGIN_PAGE_CACHE_MS = 10 * 60 * 1000;
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
+const DEFAULT_QR_POLL_INTERVAL_SECONDS = 3;
 const FALLBACK_COUNTRIES: DoubanSupportedCountry[] = [
   {
     label: "中国",
@@ -138,7 +148,7 @@ export class ProxyLoginService {
     return {
       supportedCountries: snapshot.supportedCountries,
       defaultCountryCode: snapshot.defaultCountry.countryCode,
-      availableModes: ["sms", "password"] as const
+      availableModes: ["qr", "sms", "password"] as const
     };
   }
 
@@ -157,19 +167,29 @@ export class ProxyLoginService {
       verificationMethod: "none",
       maskedTarget: null,
       resendAvailableAt: null,
+      pollIntervalSeconds: null,
       phoneNumber: null,
       country: snapshot.defaultCountry,
-      mode: null
+      mode: null,
+      qrCode: null,
+      qrCodeImageUrl: null,
+      qrStatus: null
     };
     this.attempts.set(attempt.id, attempt);
     await this.initializeLoginPage(attempt);
     return this.snapshot(attempt);
   }
 
-  getStatus(loginAttemptId: string): DoubanProxyLoginStatusResponse | null {
+  async getStatus(loginAttemptId: string): Promise<DoubanProxyLoginStatusResponse | null> {
     this.cleanupExpired();
     const attempt = this.attempts.get(loginAttemptId);
-    return attempt ? this.snapshot(attempt) : null;
+    if (!attempt) {
+      return null;
+    }
+    if (attempt.mode === "qr" && attempt.qrCode && attempt.status !== "claimed" && attempt.status !== "cancelled" && attempt.status !== "expired") {
+      return this.refreshQrStatus(attempt);
+    }
+    return this.snapshot(attempt);
   }
 
   cancel(loginAttemptId: string): DoubanProxyLoginStatusResponse | null {
@@ -184,6 +204,10 @@ export class ProxyLoginService {
     attempt.nextAction = "none";
     attempt.verificationMethod = "none";
     attempt.resendAvailableAt = null;
+    attempt.pollIntervalSeconds = null;
+    attempt.qrCode = null;
+    attempt.qrCodeImageUrl = null;
+    attempt.qrStatus = "cancel";
     return this.snapshot(attempt);
   }
 
@@ -192,6 +216,54 @@ export class ProxyLoginService {
     if (attempt) {
       attempt.status = "claimed";
       this.attempts.delete(loginAttemptId);
+    }
+  }
+
+  async startQrLogin(input: StartQrInput): Promise<DoubanProxyLoginStatusResponse> {
+    this.cleanupExpired();
+    const attempt = this.requireActiveAttempt(input.loginAttemptId);
+    if (!("cookieJar" in attempt)) {
+      return attempt;
+    }
+
+    attempt.mode = "qr";
+    attempt.maskedTarget = null;
+    attempt.resendAvailableAt = null;
+    this.prepareSubmission(attempt, "start_qr", "qr");
+
+    try {
+      const body = new URLSearchParams({
+        ck: attempt.cookieJar.get("ck") ?? ""
+      });
+      const response = await this.request(attempt, `${this.options.accountsBaseUrl}/j/mobile/login/qrlogin_code`, {
+        method: "POST",
+        headers: this.formHeaders(attempt),
+        body: body.toString()
+      });
+
+      const record = this.parseLoginResponse(response.text);
+      if (!this.isSuccess(record)) {
+        return this.handleQrStartFailure(attempt, record);
+      }
+
+      const qrCode = String(record.payload.code ?? "").trim();
+      const qrCodeImageUrl = String(record.payload.img ?? "").trim();
+      if (!qrCode || !qrCodeImageUrl) {
+        return this.failAttempt(attempt, "douban_unavailable", "豆瓣没有返回可用二维码，请稍后重试。", "start_qr", "qr");
+      }
+
+      attempt.status = "created";
+      attempt.errorCode = null;
+      attempt.message = "请打开豆瓣 App 扫码登录。";
+      attempt.nextAction = "poll_qr_status";
+      attempt.verificationMethod = "qr";
+      attempt.pollIntervalSeconds = DEFAULT_QR_POLL_INTERVAL_SECONDS;
+      attempt.qrCode = qrCode;
+      attempt.qrCodeImageUrl = qrCodeImageUrl;
+      attempt.qrStatus = "pending";
+      return this.snapshot(attempt);
+    } catch (error) {
+      return this.failAttempt(attempt, "douban_unavailable", "加载二维码失败，请稍后重试。", "start_qr", "qr", error);
     }
   }
 
@@ -380,6 +452,74 @@ export class ProxyLoginService {
     return snapshot.supportedCountries.find((item) => item.countryCode === countryCode) ?? snapshot.defaultCountry;
   }
 
+  private async refreshQrStatus(attempt: LoginAttempt): Promise<DoubanProxyLoginStatusResponse> {
+    if (!attempt.qrCode) {
+      return this.snapshot(attempt);
+    }
+
+    const ck = attempt.cookieJar.get("ck") ?? "";
+    if (!ck) {
+      return this.blockAttempt(attempt, "security_challenge", "二维码登录状态丢失，请重新获取二维码。", "start_qr", "qr");
+    }
+
+    try {
+      const url = new URL(`${this.options.accountsBaseUrl}/j/mobile/login/qrlogin_status`);
+      url.searchParams.set("ck", ck);
+      url.searchParams.set("code", attempt.qrCode);
+      const response = await this.request(attempt, url.toString(), {
+        method: "GET",
+        headers: {
+          accept: "application/json, text/javascript, */*; q=0.01",
+          referer: `${this.options.accountsBaseUrl}/passport/login`
+        }
+      });
+      const record = this.parseLoginResponse(response.text);
+      if (!this.isSuccess(record)) {
+        return this.handleQrStatusFailure(attempt, record);
+      }
+
+      const qrStatus = normalizeQrStatus(record.payload.login_status);
+      attempt.verificationMethod = "qr";
+      attempt.pollIntervalSeconds = DEFAULT_QR_POLL_INTERVAL_SECONDS;
+      attempt.qrStatus = qrStatus;
+      attempt.nextAction = "poll_qr_status";
+
+      if (qrStatus === "scan") {
+        attempt.status = "needs_verification";
+        attempt.errorCode = null;
+        attempt.message = "扫码成功，请在手机上确认登录。";
+        return this.snapshot(attempt);
+      }
+
+      if (qrStatus === "login") {
+        return this.authorizeAttempt(attempt);
+      }
+
+      if (qrStatus === "invalid") {
+        attempt.status = "expired";
+        attempt.errorCode = "qr_expired";
+        attempt.message = "二维码已失效，请重新获取。";
+        attempt.nextAction = "start_qr";
+        return this.snapshot(attempt);
+      }
+
+      if (qrStatus === "cancel") {
+        attempt.status = "blocked";
+        attempt.errorCode = "qr_cancelled";
+        attempt.message = "手机端已取消登录，请重新扫码。";
+        attempt.nextAction = "start_qr";
+        return this.snapshot(attempt);
+      }
+
+      attempt.status = "created";
+      attempt.errorCode = null;
+      attempt.message = "请打开豆瓣 App 扫码登录。";
+      return this.snapshot(attempt);
+    } catch (error) {
+      return this.failAttempt(attempt, "douban_unavailable", "轮询二维码状态失败，请稍后重试。", "poll_qr_status", "qr", error);
+    }
+  }
+
   private formHeaders(attempt: CookieCarrier) {
     const ck = attempt.cookieJar.get("ck") ?? "";
     return {
@@ -401,6 +541,7 @@ export class ProxyLoginService {
     attempt.message = null;
     attempt.nextAction = nextAction;
     attempt.verificationMethod = verificationMethod;
+    attempt.pollIntervalSeconds = verificationMethod === "qr" ? DEFAULT_QR_POLL_INTERVAL_SECONDS : null;
   }
 
   private async authorizeAttempt(attempt: LoginAttempt): Promise<SubmitResult> {
@@ -414,6 +555,7 @@ export class ProxyLoginService {
     attempt.message = null;
     attempt.errorCode = null;
     attempt.nextAction = "none";
+    attempt.qrStatus = attempt.mode === "qr" ? "login" : attempt.qrStatus;
     return { ...this.snapshot(attempt), cookie };
   }
 
@@ -465,6 +607,26 @@ export class ProxyLoginService {
     return this.snapshot(attempt);
   }
 
+  private handleQrStartFailure(attempt: LoginAttempt, record: ParsedLoginResponse) {
+    if (record.messageCode === "captcha_required" || containsCaptchaText(record)) {
+      return this.blockAttempt(attempt, "needs_captcha", "豆瓣要求图形验证，请改用 Cookie 导入。", "use_cookie_import", "captcha");
+    }
+    if (isSecurityChallenge(record)) {
+      return this.blockAttempt(attempt, "security_challenge", "豆瓣触发了设备或账号安全验证，请改用 Cookie 导入。", "use_cookie_import", "none");
+    }
+    return this.failAttempt(attempt, "douban_unavailable", this.extractUserMessage(record) ?? "加载二维码失败。", "start_qr", "qr");
+  }
+
+  private handleQrStatusFailure(attempt: LoginAttempt, record: ParsedLoginResponse) {
+    if (record.messageCode === "captcha_required" || containsCaptchaText(record)) {
+      return this.blockAttempt(attempt, "needs_captcha", "豆瓣要求图形验证，请改用 Cookie 导入。", "use_cookie_import", "captcha");
+    }
+    if (isSecurityChallenge(record)) {
+      return this.blockAttempt(attempt, "security_challenge", "豆瓣触发了设备或账号安全验证，请改用 Cookie 导入。", "use_cookie_import", "none");
+    }
+    return this.failAttempt(attempt, "douban_unavailable", this.extractUserMessage(record) ?? "二维码状态异常，请重新获取。", "start_qr", "qr");
+  }
+
   private blockAttempt(
     attempt: LoginAttempt,
     errorCode: DoubanProxyLoginErrorCode,
@@ -477,6 +639,7 @@ export class ProxyLoginService {
     attempt.message = message;
     attempt.nextAction = nextAction;
     attempt.verificationMethod = verificationMethod;
+    attempt.qrStatus = verificationMethod === "qr" ? attempt.qrStatus ?? "invalid" : attempt.qrStatus;
     return this.snapshot(attempt);
   }
 
@@ -493,6 +656,7 @@ export class ProxyLoginService {
     attempt.message = message;
     attempt.nextAction = nextAction;
     attempt.verificationMethod = verificationMethod;
+    attempt.qrStatus = verificationMethod === "qr" ? attempt.qrStatus : null;
     return this.snapshot(attempt);
   }
 
@@ -591,6 +755,10 @@ export class ProxyLoginService {
       verificationMethod: attempt.verificationMethod,
       maskedTarget: attempt.maskedTarget,
       retryAfterSeconds: this.computeRetryAfterSeconds(attempt) || null,
+      pollIntervalSeconds: attempt.pollIntervalSeconds,
+      qrCode: attempt.qrCode,
+      qrCodeImageUrl: attempt.qrCodeImageUrl,
+      qrStatus: attempt.qrStatus,
       availableFallbacks: COOKIE_IMPORT_FALLBACKS
     };
   }
@@ -615,6 +783,8 @@ export class ProxyLoginService {
     attempt.nextAction = "none";
     attempt.verificationMethod = "none";
     attempt.resendAvailableAt = null;
+    attempt.pollIntervalSeconds = null;
+    attempt.qrStatus = attempt.mode === "qr" ? "invalid" : null;
   }
 
   private checkRateLimit(ipAddress: string) {
@@ -724,4 +894,12 @@ function maskPhoneNumber(areaCode: string, phoneNumber: string) {
     return `${areaCode} ${phoneNumber}`;
   }
   return `${areaCode} ${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)}`;
+}
+
+function normalizeQrStatus(value: unknown): DoubanProxyQrStatus {
+  const qrStatus = String(value ?? "").toLowerCase();
+  if (qrStatus === "scan" || qrStatus === "login" || qrStatus === "invalid" || qrStatus === "cancel") {
+    return qrStatus;
+  }
+  return "pending";
 }

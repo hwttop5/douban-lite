@@ -168,12 +168,25 @@ describe("SubjectDetailPage", () => {
   });
 
   it("renders music tracks and related albums", async () => {
+    const relatedAlbum = {
+      ...buildSubject("music", "20427949", "Related Album"),
+      creators: ["Beck"],
+      metadata: {
+        又名: "欧迪雷",
+        表演者: "Beck",
+        流派: "摇滚",
+        专辑类型: "专辑",
+        介质: "Audio CD",
+        发行时间: "1996-06-18",
+        出版者: "Geffen Records"
+      }
+    };
     renderSubjectDetailPage(
       "music",
       "30401866",
       buildDetailResponse("music", "30401866", "Music Demo", {
         trackList: ["Track One", "Track Two"],
-        relatedSubjects: [buildSubject("music", "20427949", "Related Album")],
+        relatedSubjects: [relatedAlbum],
         sectionLinks: [{ key: "related", label: "Related", url: "https://music.douban.com/subject/30401866/recommend" }]
       })
     );
@@ -183,6 +196,11 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Track Two")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢听此专辑的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Related Album")).toBeInTheDocument();
+    const relatedAlbumCard = screen.getByText("Related Album").closest("a");
+    expect(relatedAlbumCard?.querySelector(".subject-card__meta-score")?.textContent).toContain("8.8");
+    expect(relatedAlbumCard?.querySelector(".subject-card__meta-details")?.textContent).toContain("Beck");
+    expect(relatedAlbumCard?.querySelector(".subject-card__detail-lines")?.textContent).toContain("欧迪雷 · Beck");
+    expect(relatedAlbumCard?.querySelector(".subject-card__detail-lines")?.textContent).toContain("摇滚 · 专辑 · Audio CD");
   });
 
   it("prefers the user's comment over status text when a music comment exists", async () => {
@@ -232,22 +250,47 @@ describe("SubjectDetailPage", () => {
     expect(document.querySelector(".detail-my-rating__summary span")).toBeNull();
   });
 
+  it("collapses long book summaries behind a view-all action", async () => {
+    const user = userEvent.setup();
+    renderSubjectDetailPage(
+      "book",
+      "1007305",
+      buildDetailResponse("book", "1007305", "Book Demo", {
+        subject: {
+          ...buildSubject("book", "1007305", "Book Demo"),
+          summary: Array.from({ length: 24 }, (_, index) => `第 ${index + 1} 段简介内容需要保留给展开以后继续阅读`).join("，")
+        }
+      })
+    );
+
+    expect(await screen.findByText(/第 1 段简介内容/)).toBeInTheDocument();
+    expect(document.querySelector(".detail-summary-wrap--collapsed")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "查看全部" }));
+    expect(document.querySelector(".detail-summary-wrap--collapsed")).toBeNull();
+  });
+
   it("renders book table of contents and related books", async () => {
+    const user = userEvent.setup();
     renderSubjectDetailPage(
       "book",
       "37817685",
       buildDetailResponse("book", "37817685", "Book Demo", {
-        tableOfContents: ["Prologue", "Chapter One", "Chapter Two"],
+        tableOfContents: Array.from({ length: 12 }, (_, index) => `Chapter ${index + 1}`),
         relatedSubjects: [buildSubject("book", "1003078", "Related Book")],
         sectionLinks: [{ key: "related", label: "Related", url: "https://book.douban.com/subject/37817685/recommend" }]
       })
     );
 
     expect(await screen.findByRole("heading", { name: "目录" })).toBeInTheDocument();
-    expect(screen.getByText("Prologue")).toBeInTheDocument();
-    expect(screen.getByText("Chapter One")).toBeInTheDocument();
+    expect(screen.getByText("Chapter 1")).toBeInTheDocument();
+    expect(document.querySelector(".detail-list-wrap--collapsed")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "查看全部" }));
+    expect(document.querySelector(".detail-list-wrap--collapsed")).toBeNull();
+    expect(screen.getByText("Chapter 12")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢读此书的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Related Book")).toBeInTheDocument();
+    const relatedBookCard = screen.getByText("Related Book").closest("a");
+    expect(relatedBookCard?.querySelector(".subject-card__meta-score")?.textContent).toContain("8.8");
   });
 
   it("renders game media and related games", async () => {
@@ -423,6 +466,7 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Commenter")).toBeInTheDocument();
     expect(screen.getByText("PC")).toBeInTheDocument();
     expect(screen.getByText("2026-05-13")).toBeInTheDocument();
+    expect(screen.getByText("Commenter").closest("article")?.querySelector(".douban-stars[aria-label='4 星']")).not.toBeNull();
     expect(screen.getByRole("button", { name: "投票" })).toBeInTheDocument();
 
     expect(screen.queryByText("Image 4")).not.toBeInTheDocument();
@@ -435,6 +479,11 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Image 4")).toBeInTheDocument();
     expect(screen.getByText("Related 5")).toBeInTheDocument();
     expect(screen.getAllByText("CD Projekt RED · Aspyr Media, Inc. / 2K Games · 2015-05-19").length).toBeGreaterThan(0);
+
+    const firstRelatedCard = screen.getByText("Related 1").closest("a");
+    const firstRelatedExtra = firstRelatedCard?.querySelector(".subject-card__extra");
+    expect(firstRelatedExtra?.firstElementChild).toHaveClass("subject-card__facts");
+    expect(firstRelatedExtra?.lastElementChild).toHaveClass("subject-card__meta-list");
 
     await user.click(screen.getByText("Image 1").closest("button")!);
     expect(screen.getByRole("dialog", { name: "Image 1" })).toBeInTheDocument();

@@ -74,10 +74,10 @@ describe("API integration", () => {
     expect(overview.body.sessionStatus.status).toBe("valid");
   });
 
-  it("returns SMS-first proxy login config", async () => {
+  it("returns QR-first proxy login config", async () => {
     const configResponse = await agent.get("/api/auth/douban/proxy/config").expect(200);
     expect(configResponse.body.enabled).toBe(true);
-    expect(configResponse.body.availableModes).toEqual(["sms", "password"]);
+    expect(configResponse.body.availableModes).toEqual(["qr", "sms", "password"]);
     expect(configResponse.body.defaultCountryCode).toBe("CN");
     expect(configResponse.body.supportedCountries[0]).toMatchObject({
       label: "中国",
@@ -85,6 +85,66 @@ describe("API integration", () => {
       areaCode: "+86",
       countryCode: "CN"
     });
+  });
+
+  it("logs in through the QR proxy login flow", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+
+    const qrStarted = await agent
+      .post("/api/auth/douban/proxy/qr/start")
+      .send({ loginAttemptId: started.body.loginAttemptId })
+      .expect(200);
+
+    expect(qrStarted.body.status).toBe("created");
+    expect(qrStarted.body.verificationMethod).toBe("qr");
+    expect(qrStarted.body.nextAction).toBe("poll_qr_status");
+    expect(qrStarted.body.qrCode).toContain("douban-qrlogin|");
+    expect(qrStarted.body.qrCodeImageUrl).toContain("/dae/qrgen/");
+    expect(qrStarted.body.qrStatus).toBe("pending");
+
+    const pending = await agent.get(`/api/auth/douban/proxy/${started.body.loginAttemptId}/status`).expect(200);
+    expect(pending.body.qrStatus).toBe("pending");
+
+    const scanned = await agent.get(`/api/auth/douban/proxy/${started.body.loginAttemptId}/status`).expect(200);
+    expect(scanned.body.status).toBe("needs_verification");
+    expect(scanned.body.qrStatus).toBe("scan");
+
+    await agent.get(`/api/auth/douban/proxy/${started.body.loginAttemptId}/status`).expect(200);
+    const claimed = await agent.get(`/api/auth/douban/proxy/${started.body.loginAttemptId}/status`).expect(200);
+    expect(claimed.body.status).toBe("claimed");
+    expect(claimed.body.user.peopleId).toBe("demo-user");
+    expect(claimed.body.sessionStatus.status).toBe("valid");
+
+    const overview = await agent.get("/api/me/overview").expect(200);
+    expect(overview.body.sessionStatus.status).toBe("valid");
+  });
+
+  it("reports QR cancellation and expiry without creating a session", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const qrStarted = await agent
+      .post("/api/auth/douban/proxy/qr/start")
+      .send({ loginAttemptId: started.body.loginAttemptId })
+      .expect(200);
+
+    mock.setQrState(qrStarted.body.qrCode, "cancel");
+
+    const cancelled = await agent.get(`/api/auth/douban/proxy/${started.body.loginAttemptId}/status`).expect(200);
+    expect(cancelled.body.status).toBe("blocked");
+    expect(cancelled.body.errorCode).toBe("qr_cancelled");
+
+    const expiredAttempt = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const expiredQr = await agent
+      .post("/api/auth/douban/proxy/qr/start")
+      .send({ loginAttemptId: expiredAttempt.body.loginAttemptId })
+      .expect(200);
+
+    mock.setQrState(expiredQr.body.qrCode, "invalid");
+
+    const expired = await agent.get(`/api/auth/douban/proxy/${expiredAttempt.body.loginAttemptId}/status`).expect(200);
+    expect(expired.body.status).toBe("expired");
+    expect(expired.body.errorCode).toBe("qr_expired");
+
+    await agent.get("/api/me/overview").expect(401);
   });
 
   it("logs in through the SMS proxy login flow", async () => {
@@ -340,6 +400,30 @@ describe("API integration", () => {
 
     await agent.post("/api/timeline/following-1/like").send({ detailUrl: "not-a-url" }).expect(400);
     await agent.post("/api/timeline/following-1/reply").send({ detailUrl: "https://example.com/status", text: "" }).expect(400);
+  });
+
+  it("returns stale timeline snapshots and rejects timeline actions when Douban blocks the session", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const timeline = await agent.get("/api/timeline?scope=following").expect(200);
+    const item = timeline.body.items[0];
+    mock.setTimelineBlocked(true);
+
+    const stale = await agent.get("/api/timeline?scope=following").expect(200);
+    expect(stale.body.stale).toBe(true);
+    expect(stale.body.items[0].id).toBe(item.id);
+
+    for (const [path, payload] of [
+      [`/api/timeline/${item.id}/like`, { detailUrl: item.detailUrl }],
+      [`/api/timeline/${item.id}/reply`, { detailUrl: item.detailUrl, text: "reply" }],
+      [`/api/timeline/${item.id}/repost`, { detailUrl: item.detailUrl, text: "repost" }]
+    ] as const) {
+      const failed = await agent.post(path).send(payload).expect(401);
+      expect(failed.body.error).toContain("Cookie");
+    }
+
+    const auth = await agent.get("/api/auth/me").expect(200);
+    expect(auth.body.sessionStatus.status).toBe("invalid");
   });
 
   it("isolates personal state between users", async () => {

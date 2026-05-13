@@ -173,14 +173,19 @@ export const doubanProxyLoginStatuses = [
 ] as const;
 export type DoubanProxyLoginStatus = (typeof doubanProxyLoginStatuses)[number];
 
-export const doubanProxyLoginModes = ["sms", "password"] as const;
+export const doubanProxyLoginModes = ["qr", "sms", "password"] as const;
 export type DoubanProxyLoginMode = (typeof doubanProxyLoginModes)[number];
 
-export const doubanProxyVerificationMethods = ["none", "sms", "captcha"] as const;
+export const doubanProxyVerificationMethods = ["none", "sms", "captcha", "qr"] as const;
 export type DoubanProxyVerificationMethod = (typeof doubanProxyVerificationMethods)[number];
+
+export const doubanProxyQrStatuses = ["pending", "scan", "login", "invalid", "cancel"] as const;
+export type DoubanProxyQrStatus = (typeof doubanProxyQrStatuses)[number];
 
 export const doubanProxyLoginNextActions = [
   "none",
+  "start_qr",
+  "poll_qr_status",
   "send_sms",
   "enter_sms_code",
   "enter_password",
@@ -196,6 +201,8 @@ export type DoubanProxyLoginErrorCode =
   | "proxy_login_disabled"
   | "attempt_not_found"
   | "attempt_expired"
+  | "qr_expired"
+  | "qr_cancelled"
   | "invalid_credentials"
   | "invalid_sms_code"
   | "needs_captcha"
@@ -228,6 +235,10 @@ export interface DoubanProxyLoginStartResponse {
   verificationMethod: DoubanProxyVerificationMethod;
   maskedTarget: string | null;
   retryAfterSeconds: number | null;
+  pollIntervalSeconds: number | null;
+  qrCode: string | null;
+  qrCodeImageUrl: string | null;
+  qrStatus: DoubanProxyQrStatus | null;
   availableFallbacks: DoubanProxyLoginFallback[];
 }
 
@@ -407,6 +418,10 @@ export const doubanProxyLoginSmsSendSchema = z.object({
 export const doubanProxyLoginSmsVerifySchema = z.object({
   loginAttemptId: z.string().trim().min(1),
   smsCode: z.string().trim().min(1, "SMS 验证码不能为空").max(20)
+});
+
+export const doubanProxyLoginQrStartSchema = z.object({
+  loginAttemptId: z.string().trim().min(1)
 });
 
 export const updateLibraryStateSchema = z.object({

@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { DoubanProxyLoginMode } from "../../../../packages/shared/src";
+import { proxiedImageUrl } from "../api";
 import { LoadingButtonLabel, LoadingInline, PanelLoading } from "../components/loading-state";
 import {
+  getProxyErrorTone,
   getProxyMessageTone,
   getSmsSendButtonLabel,
   useDoubanLoginController
 } from "../hooks/use-douban-login-controller";
 import { resolveLoginSuccessPath } from "../login-routing";
 
-type LoginTab = DoubanProxyLoginMode | "cookie";
+type LoginTab = "sms" | "password" | "cookie";
 
 function CookieLoginGuide() {
   return (
@@ -51,10 +52,26 @@ function CookieLoginGuide() {
   );
 }
 
+function getQrStatusText(status: string | null | undefined) {
+  switch (status) {
+    case "scan":
+      return "扫码成功，请在手机上确认登录。";
+    case "login":
+      return "正在确认登录...";
+    case "invalid":
+      return "二维码已失效，请刷新后重试。";
+    case "cancel":
+      return "手机端已取消登录，请刷新后重试。";
+    default:
+      return "请打开豆瓣 App 扫码登录。";
+  }
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<LoginTab>("sms");
+  const [didAutoStartQr, setDidAutoStartQr] = useState(false);
   const postLoginPath = resolveLoginSuccessPath(location.search);
   const controller = useDoubanLoginController({
     onAuthenticated: () => navigate(postLoginPath, { replace: true })
@@ -65,18 +82,40 @@ export function LoginPage() {
   const hasDoubanSession = auth?.authenticated && sessionStatus === "valid";
   const currentAccountLabel = auth?.user?.displayName ?? auth?.sessionStatus.displayName ?? "豆瓣用户";
   const currentAccountMeta = auth?.user?.ipLocation ?? auth?.sessionStatus.ipLocation ?? "未知地区";
-  const isProxyTab = activeTab !== "cookie";
-  const activeProxyMode = activeTab === "cookie" ? null : activeTab;
-  const activeProxyModeAvailable =
-    activeProxyMode != null && controller.proxyLoginEnabled && controller.availableModes.includes(activeProxyMode);
-  const proxyMutationError = isProxyTab
-    ? controller.proxyConfigQuery.error ??
-      controller.smsSendMutation.error ??
-      controller.smsVerifyMutation.error ??
-      controller.passwordLoginMutation.error
-    : null;
+  const isSmsAvailable = controller.proxyLoginEnabled && controller.availableModes.includes("sms");
+  const isPasswordAvailable = controller.proxyLoginEnabled && controller.availableModes.includes("password");
+  const isQrAvailable = controller.proxyLoginEnabled && controller.availableModes.includes("qr");
+  const secondaryMutationError =
+    activeTab === "sms"
+      ? controller.smsSendMutation.error ?? controller.smsVerifyMutation.error
+      : activeTab === "password"
+        ? controller.passwordLoginMutation.error
+        : null;
+  const qrError = controller.qrStartMutation.error ?? controller.qrStatusQuery.error;
+  const qrMessage = controller.proxyResult?.verificationMethod === "qr" ? controller.proxyResult.message : null;
+  const qrMessageTone = getProxyMessageTone(controller.proxyResult);
+  const qrImageSrc = proxiedImageUrl(controller.currentQrCodeImageUrl);
+  const showQrWarning = controller.proxyResult?.verificationMethod === "qr" && Boolean(qrMessage);
+  const showSecondaryResult =
+    controller.proxyResult &&
+    activeTab !== "cookie" &&
+    controller.currentFlowMode === activeTab &&
+    (controller.proxyResult.verificationMethod !== "qr" || controller.proxyResult.status === "claimed");
+  const secondaryResult = showSecondaryResult ? controller.proxyResult : null;
+  const secondaryResultMessage = secondaryResult?.message ?? null;
 
-  const renderProxyUnavailable = (mode: DoubanProxyLoginMode) => {
+  useEffect(() => {
+    if (didAutoStartQr || !isQrAvailable) {
+      return;
+    }
+    if (controller.qrStartMutation.isPending || qrImageSrc) {
+      return;
+    }
+    setDidAutoStartQr(true);
+    controller.qrStartMutation.mutate();
+  }, [controller, didAutoStartQr, isQrAvailable, qrImageSrc]);
+
+  const renderProxyUnavailable = (mode: Exclude<LoginTab, "cookie">) => {
     if (controller.proxyConfigQuery.isPending && !controller.proxyConfigQuery.data) {
       return (
         <p className="loading-row">
@@ -125,7 +164,9 @@ export function LoginPage() {
             <div className="panel__header">
               <div>
                 <strong>当前已登录账号</strong>
-                <p>{currentAccountLabel} / {currentAccountMeta}</p>
+                <p>
+                  {currentAccountLabel} / {currentAccountMeta}
+                </p>
               </div>
               <span className="pill pill--valid">已登录</span>
             </div>
@@ -133,11 +174,56 @@ export function LoginPage() {
           </section>
         ) : null}
 
+        <section className="panel login-page__qr-panel">
+          <div className="panel__header">
+            <div>
+              <strong>二维码登录</strong>
+              <p>用另一台已安装豆瓣 App 的手机扫码。遇到风控或异常时，请改用导入 Cookie 登录。</p>
+            </div>
+          </div>
+
+          {!isQrAvailable ? (
+            <p className="notice notice--subtle">当前环境暂不支持二维码登录，请改用下方其它登录方式。</p>
+          ) : (
+            <div className="login-page__qr-body">
+              <div className="login-page__qr-card">
+                {controller.qrStartMutation.isPending && !qrImageSrc ? (
+                  <p className="loading-row">
+                    <LoadingInline label="正在加载二维码" tone="soft" />
+                  </p>
+                ) : qrImageSrc ? (
+                  <img className="login-page__qr-image" src={qrImageSrc} alt="豆瓣登录二维码" />
+                ) : (
+                  <div className="login-page__qr-empty">
+                    <p>二维码暂不可用</p>
+                    <p>请点击刷新二维码重试。</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="login-page__qr-meta">
+                <p className={showQrWarning ? qrMessageTone : "notice notice--subtle"}>{qrMessage ?? getQrStatusText(controller.proxyResult?.qrStatus)}</p>
+                {qrError ? <p className={getProxyErrorTone(qrError)}>{qrError.message}</p> : null}
+                <div className="settings-actions settings-actions--import">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => controller.qrStartMutation.mutate()}
+                    disabled={controller.qrStartMutation.isPending}
+                  >
+                    {controller.qrStartMutation.isPending ? <LoadingButtonLabel label="刷新中" /> : "刷新二维码"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
         <section className="panel login-page__panel">
           <div className="panel__header">
             <div>
-              <strong>选择登录方式</strong>
-              <p>遇到风控或异常时，请改用导入 Cookie 登录。</p>
+              <strong>其它登录方式</strong>
+              <p>短信验证、账号密码和导入 Cookie 都保留在这里，作为次级入口和兜底。</p>
             </div>
           </div>
 
@@ -172,7 +258,7 @@ export function LoginPage() {
           </div>
 
           {activeTab === "sms" ? (
-            activeProxyModeAvailable ? (
+            isSmsAvailable ? (
               <div className="settings-auth-panel settings-auth-panel--sms">
                 <p className="notice notice--subtle">
                   只支持已有账号的手机号 + SMS 验证码登录。如果豆瓣要求图形验证、设备验证、补充资料或其它非标准挑战，请直接改用导入 Cookie 登录。
@@ -200,26 +286,28 @@ export function LoginPage() {
                 <div className="settings-code-row">
                   <label className="field settings-code-row__field">
                     <span>SMS 验证码</span>
-                    <input
-                      value={controller.smsCode}
-                      onChange={(event) => controller.setSmsCode(event.target.value)}
-                      autoComplete="one-time-code"
-                      inputMode="numeric"
-                      placeholder="输入 6 位验证码"
-                    />
+                    <div className="settings-code-row__control">
+                      <input
+                        value={controller.smsCode}
+                        onChange={(event) => controller.setSmsCode(event.target.value)}
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        placeholder="输入 6 位验证码"
+                      />
+                      <button
+                        className="secondary-button settings-code-row__button"
+                        type="button"
+                        onClick={() => controller.smsSendMutation.mutate()}
+                        disabled={controller.smsSendMutation.isPending || !controller.canSendSmsCode}
+                      >
+                        {controller.smsSendMutation.isPending ? (
+                          <LoadingButtonLabel label="发送中" />
+                        ) : (
+                          getSmsSendButtonLabel(controller.smsRetryAfterSeconds, controller.hasSentSmsCode)
+                        )}
+                      </button>
+                    </div>
                   </label>
-                  <button
-                    className="secondary-button settings-code-row__button"
-                    type="button"
-                    onClick={() => controller.smsSendMutation.mutate()}
-                    disabled={controller.smsSendMutation.isPending || !controller.canSendSmsCode}
-                  >
-                    {controller.smsSendMutation.isPending ? (
-                      <LoadingButtonLabel label="发送中" />
-                    ) : (
-                      getSmsSendButtonLabel(controller.smsRetryAfterSeconds, controller.hasSentSmsCode)
-                    )}
-                  </button>
                 </div>
                 <div className="settings-actions settings-actions--import">
                   <button
@@ -238,7 +326,7 @@ export function LoginPage() {
           ) : null}
 
           {activeTab === "password" ? (
-            activeProxyModeAvailable ? (
+            isPasswordAvailable ? (
               <div className="settings-auth-panel settings-auth-panel--password">
                 <p className="notice notice--subtle">
                   账号密码不会被持久化保存。如果豆瓣要求 SMS、图形验证或设备安全验证，请切换到短信验证登录，或直接导入 Cookie 登录。
@@ -290,7 +378,7 @@ export function LoginPage() {
                   placeholder="dbcl2=...; ck=...;"
                 />
               </label>
-              {controller.importMutation.error ? <p className="form-error">{controller.importMutation.error.message}</p> : null}
+              {controller.importMutation.error ? <p className={getProxyErrorTone(controller.importMutation.error)}>{controller.importMutation.error.message}</p> : null}
               <div className="settings-actions settings-actions--import">
                 <button
                   className="primary-button"
@@ -305,10 +393,8 @@ export function LoginPage() {
             </div>
           ) : null}
 
-          {isProxyTab && controller.proxyResult && controller.proxyResult.status !== "created" ? (
-            <p className={getProxyMessageTone(controller.proxyResult)}>{controller.proxyResult.message}</p>
-          ) : null}
-          {proxyMutationError ? <p className="form-error">{proxyMutationError.message}</p> : null}
+          {secondaryResultMessage ? <p className={getProxyMessageTone(secondaryResult)}>{secondaryResultMessage}</p> : null}
+          {secondaryMutationError ? <p className={getProxyErrorTone(secondaryMutationError)}>{secondaryMutationError.message}</p> : null}
         </section>
       </div>
     </div>

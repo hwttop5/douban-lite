@@ -172,6 +172,17 @@ export function startDoubanProxyLogin() {
   });
 }
 
+export function startDoubanProxyQrLogin(input: { loginAttemptId: string }) {
+  return request<DoubanProxyLoginStatusResponse>("/api/auth/douban/proxy/qr/start", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getDoubanProxyLoginStatus(loginAttemptId: string) {
+  return request<DoubanProxyLoginSubmitResponse>(`/api/auth/douban/proxy/${encodeURIComponent(loginAttemptId)}/status`);
+}
+
 export function submitDoubanProxyPassword(input: { loginAttemptId: string; account: string; password: string; countryCode?: string }) {
   return request<DoubanProxyLoginSubmitResponse>("/api/auth/douban/proxy/password", {
     method: "POST",

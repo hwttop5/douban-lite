@@ -116,6 +116,23 @@ function buildRelatedHighlights(subject: SubjectDetailResponse["subject"]) {
   return values;
 }
 
+function buildRelatedDetailLines(subject: SubjectDetailResponse["subject"]) {
+  if (subject.medium === "music") {
+    const primaryLine = [metadataValue(subject, "又名"), metadataValue(subject, "表演者")].filter((value): value is string => Boolean(value)).join(" · ");
+    const detailLine = [
+      metadataValue(subject, "流派"),
+      metadataValue(subject, "专辑类型"),
+      metadataValue(subject, "介质"),
+      metadataValue(subject, "发行时间"),
+      metadataValue(subject, "出版者")
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
+    return [primaryLine, detailLine].filter((value) => value.length > 0);
+  }
+  return [];
+}
+
 function getVisibleUserItem(userItem: SubjectDetailResponse["userItem"], hasDoubanSession: boolean) {
   return hasDoubanSession ? userItem : null;
 }
@@ -245,6 +262,8 @@ export function SubjectDetailPage() {
   const [visibleMediaCount, setVisibleMediaCount] = useState(medium === "movie" ? 2 : 4);
   const [visibleStaffCount, setVisibleStaffCount] = useState(4);
   const [visibleRelatedCount, setVisibleRelatedCount] = useState(4);
+  const [tableOfContentsExpanded, setTableOfContentsExpanded] = useState(false);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [activeImage, setActiveImage] = useState<SubjectMediaItem | null>(null);
   const visibleStaffMembers = staff.slice(0, visibleStaffCount);
   const visibleMediaItems = mediaItems.slice(0, visibleMediaCount);
@@ -252,6 +271,9 @@ export function SubjectDetailPage() {
   const hasMoreStaffMembers = visibleStaffCount < staff.length;
   const hasMoreMediaItems = visibleMediaCount < mediaItems.length;
   const hasMoreRelatedSubjects = visibleRelatedCount < relatedSubjects.length;
+  const shouldCollapseTableOfContents = medium === "book" && tableOfContents.length > 10;
+  const summaryText = subject?.summary ?? "";
+  const shouldCollapseSummary = medium === "book" && summaryText.length > 180;
   const promotedUserComment = shouldPromoteUserComment(visibleUserItem?.comment) ? visibleUserItem?.comment?.trim() ?? null : null;
   const userItemCommentIsHint = looksLikeUserItemHint(visibleUserItem?.comment);
   const shouldRenderUserComment = Boolean(visibleUserItem?.comment) && !promotedUserComment;
@@ -260,6 +282,8 @@ export function SubjectDetailPage() {
     setVisibleMediaCount(medium === "movie" ? 2 : 4);
     setVisibleStaffCount(4);
     setVisibleRelatedCount(4);
+    setTableOfContentsExpanded(false);
+    setSummaryExpanded(false);
     setActiveImage(null);
   }, [doubanId, medium]);
 
@@ -459,7 +483,16 @@ export function SubjectDetailPage() {
       {subject.summary ? (
         <section className="detail-section detail-summary-section">
           <h2>剧情简介</h2>
-          <p>{subject.summary}</p>
+          <div className={shouldCollapseSummary && !summaryExpanded ? "detail-summary-wrap detail-summary-wrap--collapsed" : "detail-summary-wrap"}>
+            <p>{subject.summary}</p>
+          </div>
+          {shouldCollapseSummary && !summaryExpanded ? (
+            <div className="detail-section__footer">
+              <button type="button" className="detail-more-button" onClick={() => setSummaryExpanded(true)}>
+                查看全部
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -516,11 +549,20 @@ export function SubjectDetailPage() {
           <div className="detail-section__header">
             <h2>{detailSectionTitle(medium)}</h2>
           </div>
-          <ul className="detail-list">
-            {tableOfContents.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <div className={shouldCollapseTableOfContents && !tableOfContentsExpanded ? "detail-list-wrap detail-list-wrap--collapsed" : "detail-list-wrap"}>
+            <ul className="detail-list">
+              {tableOfContents.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          {shouldCollapseTableOfContents && !tableOfContentsExpanded ? (
+            <div className="detail-section__footer">
+              <button type="button" className="detail-more-button" onClick={() => setTableOfContentsExpanded(true)}>
+                查看全部
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -578,6 +620,7 @@ export function SubjectDetailPage() {
             {visibleRelatedSubjects.map((item) => {
               const metaValues = buildRelatedMeta(item);
               const highlightText = buildRelatedHighlights(item).join(" · ");
+              const detailLines = buildRelatedDetailLines(item);
               return (
                 <SubjectCard
                   key={`${item.medium}-${item.doubanId}`}
@@ -585,8 +628,20 @@ export function SubjectDetailPage() {
                   subject={item}
                   className="subject-card subject-card--related"
                   extra={
-                    metaValues.length > 0 || highlightText ? (
+                    metaValues.length > 0 || highlightText || detailLines.length > 0 ? (
                       <div className="subject-card__extra">
+                        {highlightText ? (
+                          <div className="subject-card__facts">
+                            <p>{highlightText}</p>
+                          </div>
+                        ) : null}
+                        {detailLines.length > 0 ? (
+                          <div className="subject-card__detail-lines">
+                            {detailLines.map((line) => (
+                              <p key={line}>{line}</p>
+                            ))}
+                          </div>
+                        ) : null}
                         {metaValues.length > 0 ? (
                           <div className="subject-card__meta-list">
                             {metaValues.map((value) => (
@@ -594,11 +649,6 @@ export function SubjectDetailPage() {
                                 {value}
                               </span>
                             ))}
-                          </div>
-                        ) : null}
-                        {highlightText ? (
-                          <div className="subject-card__facts">
-                            <p>{highlightText}</p>
                           </div>
                         ) : null}
                       </div>

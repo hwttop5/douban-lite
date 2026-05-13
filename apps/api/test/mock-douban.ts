@@ -1,4 +1,5 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { Medium, ShelfStatus } from "../../../packages/shared/src";
@@ -460,11 +461,17 @@ function renderTimeline(timelineStates: Map<string, MockTimelineState>, scope: "
   </body></html>`;
 }
 
+function mockBaseUrl(request: express.Request) {
+  return `${request.protocol}://${request.get("host")}`;
+}
+
 export async function createMockDoubanServer() {
   const app = express();
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
   const sentSmsCodes = new Map<string, string>();
+  const qrStates = new Map<string, { status: "pending" | "scan" | "login" | "invalid" | "cancel"; polls: number }>();
+  let timelineBlocked = false;
   const hasValidCsrf = (request: express.Request) =>
     String(request.headers["x-csrf-token"] ?? "") === String(request.body.ck ?? "");
 
@@ -481,7 +488,15 @@ export async function createMockDoubanServer() {
   const timelineStates = new Map<string, MockTimelineState>();
 
   app.get("/", (request, response) => {
+    if (timelineBlocked) {
+      response.redirect("/misc/sorry");
+      return;
+    }
     response.send(renderTimeline(timelineStates, "following", "demo-user", Number(request.query.start ?? 0)));
+  });
+
+  app.get("/misc/sorry", (_request, response) => {
+    response.status(200).send("<html><body>security challenge</body></html>");
   });
 
   app.get("/passport/login", (_request, response) => {
@@ -562,6 +577,56 @@ export async function createMockDoubanServer() {
     response.json({ status: "success", payload: { account_info: { id: "demo-user", phone: `${areaCode}${number}` }, vtoken: "mock-vtoken" } });
   });
 
+  app.post("/j/mobile/login/qrlogin_code", (request, response) => {
+    if (!hasValidCsrf(request)) {
+      response.status(403).json({ status: "failed", message: "csrf_invalid", localized_message: "请求校验失败" });
+      return;
+    }
+    const code = `douban-qrlogin|${randomUUID().slice(0, 12)}`;
+    qrStates.set(code, { status: "pending", polls: 0 });
+    response.json({
+      status: "success",
+      message: "success",
+      description: "处理成功",
+      payload: {
+        code,
+        img: `${mockBaseUrl(request)}/dae/qrgen/${encodeURIComponent(code)}.png`
+      }
+    });
+  });
+
+  app.get("/j/mobile/login/qrlogin_status", (request, response) => {
+    const code = String(request.query.code ?? "");
+    const state = qrStates.get(code);
+    if (!state) {
+      response.json({ status: "success", message: "success", description: "处理成功", payload: { login_status: "invalid" } });
+      return;
+    }
+
+    state.polls += 1;
+    if (state.status === "pending" && state.polls >= 2) {
+      state.status = "scan";
+    }
+    if (state.status === "scan" && state.polls >= 4) {
+      state.status = "login";
+    }
+
+    if (state.status === "login") {
+      response.setHeader("Set-Cookie", ["dbcl2=mock-dbcl2; Path=/", "ck=mock-ck; Path=/"]);
+    }
+
+    response.json({
+      status: "success",
+      message: "success",
+      description: "处理成功",
+      payload: { login_status: state.status }
+    });
+  });
+
+  app.get("/dae/qrgen/:name", (_request, response) => {
+    response.type("image/png").send(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  });
+
   app.get("/mine/", (_request, response) => {
     response.send(`<html><body><a href="/people/demo-user/">demo-user</a></body></html>`);
   });
@@ -571,11 +636,19 @@ export async function createMockDoubanServer() {
   });
 
   app.get("/people/:peopleId/status/:statusId/", (request, response) => {
+    if (timelineBlocked) {
+      response.redirect("/misc/sorry");
+      return;
+    }
     const state = ensureTimelineStateById(timelineStates, request.params.peopleId, request.params.statusId);
     response.send(`<html><body>${renderTimelineStatus(state, true)}</body></html>`);
   });
 
   app.get("/people/:peopleId/statuses", (request, response) => {
+    if (timelineBlocked) {
+      response.redirect("/misc/sorry");
+      return;
+    }
     response.send(renderTimeline(timelineStates, "mine", request.params.peopleId, Number(request.query.start ?? 0)));
   });
 
@@ -763,6 +836,15 @@ export async function createMockDoubanServer() {
     },
     readTimelineState(statusId: string) {
       return timelineStates.get(statusId) ?? null;
+    },
+    setTimelineBlocked(blocked: boolean) {
+      timelineBlocked = blocked;
+    },
+    setQrState(code: string, status: "pending" | "scan" | "login" | "invalid" | "cancel") {
+      const current = qrStates.get(code);
+      if (current) {
+        current.status = status;
+      }
     },
     setState(medium: Medium, nextState: Partial<MockRemoteState>) {
       const subject = subjects[medium];

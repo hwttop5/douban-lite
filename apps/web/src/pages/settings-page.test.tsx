@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthMeResponse } from "../../../../packages/shared/src";
 import * as api from "../api";
@@ -47,7 +47,7 @@ function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"])
   };
 }
 
-function renderSettingsPage(authMe: AuthMeResponse) {
+function renderSettingsPage(authMe: AuthMeResponse, initialEntry = "/settings") {
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
   vi.spyOn(api, "logoutDoubanSession").mockResolvedValue({
     status: "missing"
@@ -75,9 +75,12 @@ function renderSettingsPage(authMe: AuthMeResponse) {
 
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <AppContextProvider>
-          <SettingsPage />
+          <Routes>
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/login" element={<div>登录页</div>} />
+          </Routes>
         </AppContextProvider>
       </MemoryRouter>
     </QueryClientProvider>
@@ -114,11 +117,18 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "立即同步" })).toBeEnabled();
   });
 
-  it("shows the sync gate but keeps the rest of settings available when the session is invalid", async () => {
+  it("keeps the sync gate clickable and sends unauthenticated users to the login page", async () => {
     renderSettingsPage(createAuthMeResponse("invalid"));
 
     expect(await screen.findByText("需要重新登录")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "请先登录" })).toBeDisabled();
+    const loginButton = screen.getByRole("button", { name: "请先登录" });
+    expect(loginButton).toBeEnabled();
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+
+    fireEvent.click(loginButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("登录页")).toBeInTheDocument();
+    });
   });
 });

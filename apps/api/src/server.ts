@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Express, Request, Response } from "express";
 import {
+  doubanProxyLoginQrStartSchema,
   doubanProxyLoginPasswordSchema,
   doubanProxyLoginSmsSendSchema,
   doubanProxyLoginSmsVerifySchema,
@@ -22,7 +23,7 @@ import {
 import type { AppConfig } from "./config";
 import { loadConfig } from "./config";
 import { AppDatabase } from "./db";
-import { DoubanClient } from "./douban/client";
+import { DoubanClient, DoubanSessionError } from "./douban/client";
 import { createSessionToken } from "./security";
 import { ProxyLoginAttemptNotFoundError, ProxyLoginService } from "./services/proxy-login";
 import { SyncService } from "./services/sync";
@@ -222,13 +223,42 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     }
   });
 
-  app.get("/api/auth/douban/proxy/:loginAttemptId/status", (request, response) => {
-    const status = proxyLogin.getStatus(routeParam(request.params.loginAttemptId));
-    if (!status) {
-      response.status(404).json({ error: "代理登录会话不存在。" });
+  app.get("/api/auth/douban/proxy/:loginAttemptId/status", async (request, response, next) => {
+    try {
+      const status = await proxyLogin.getStatus(routeParam(request.params.loginAttemptId));
+      if (!status) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      await finalizeAuthorizedProxyLogin(response, status);
+    } catch (error) {
+      if (error instanceof ProxyLoginAttemptNotFoundError) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/douban/proxy/qr/start", async (request, response, next) => {
+    if (!config.doubanProxyLoginEnabled) {
+      response.status(403).json({ error: "代理豆瓣登录未启用。" });
       return;
     }
-    response.json(status);
+    try {
+      const body = doubanProxyLoginQrStartSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "二维码登录参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await proxyLogin.startQrLogin(body.data));
+    } catch (error) {
+      if (error instanceof ProxyLoginAttemptNotFoundError) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      next(error);
+    }
   });
 
   app.post("/api/auth/douban/proxy/password", async (request, response, next) => {
@@ -623,7 +653,11 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
   serveWebApp(app, config.webDistDir);
 
   app.use((error: unknown, _request: Request, response: Response, _next: unknown) => {
-    const message = error instanceof Error ? error.message : "未知错误。";
+    if (error instanceof DoubanSessionError) {
+      response.status(401).json({ error: error.message });
+      return;
+    }
+    const message = error instanceof Error ? error.message : "Unknown error.";
     response.status(500).json({ error: message });
   });
 

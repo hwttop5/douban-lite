@@ -9,9 +9,11 @@ import type {
 import {
   getAuthMe,
   getDoubanProxyLoginConfig,
+  getDoubanProxyLoginStatus,
   importDoubanSession,
   sendDoubanProxySmsCode,
   startDoubanProxyLogin,
+  startDoubanProxyQrLogin,
   submitDoubanProxyPassword,
   verifyDoubanProxySmsCode
 } from "../api";
@@ -25,9 +27,21 @@ const DEFAULT_SUPPORTED_COUNTRIES: DoubanSupportedCountry[] = [
   }
 ];
 
-const DEFAULT_AVAILABLE_MODES: DoubanProxyLoginMode[] = ["sms", "password"];
+const DEFAULT_AVAILABLE_MODES: DoubanProxyLoginMode[] = ["qr", "sms", "password"];
 
 type ProxyResult = DoubanProxyLoginStatusResponse | DoubanProxyLoginSubmitResponse;
+type ProxyFlowMode = "qr" | "sms" | "password" | null;
+
+function isWarningFallbackErrorCode(errorCode: ProxyResult["errorCode"] | null | undefined) {
+  return errorCode === "needs_captcha" || errorCode === "security_challenge";
+}
+
+function isTerminalProxyStatus(result: ProxyResult | null) {
+  if (!result) {
+    return false;
+  }
+  return ["claimed", "blocked", "failed", "expired", "cancelled"].includes(result.status);
+}
 
 function resolveCountryCode(
   countries: DoubanSupportedCountry[],
@@ -48,12 +62,22 @@ function resolveCountryCode(
 
 export function getProxyMessageTone(result: ProxyResult | null) {
   if (!result) {
+    return "notice notice--subtle";
+  }
+  if (isWarningFallbackErrorCode(result.errorCode)) {
     return "notice";
   }
   if (result.status === "blocked" || result.status === "failed" || result.status === "expired") {
     return "form-error";
   }
-  return "notice";
+  return "notice notice--subtle";
+}
+
+export function getProxyErrorTone(error: Error | null) {
+  if (!error) {
+    return "form-error";
+  }
+  return error.message.includes("图形验证") || error.message.includes("安全验证") ? "notice" : "form-error";
 }
 
 export function getSmsSendButtonLabel(retryAfterSeconds: number, hasSentCode: boolean) {
@@ -72,6 +96,7 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   const [cookie, setCookie] = useState("");
   const [proxyLoginAttemptId, setProxyLoginAttemptId] = useState<string | null>(null);
   const [proxyResult, setProxyResult] = useState<ProxyResult | null>(null);
+  const [currentFlowMode, setCurrentFlowMode] = useState<ProxyFlowMode>(null);
   const [proxyAccount, setProxyAccount] = useState("");
   const [proxyPassword, setProxyPassword] = useState("");
   const [smsCountryCode, setSmsCountryCode] = useState("CN");
@@ -99,6 +124,11 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   const canSendSmsCode = smsPhoneNumber.trim().length > 0 && smsRetryAfterSeconds === 0;
   const canVerifySmsCode = hasSentSmsCode && smsCode.trim().length > 0;
   const canSubmitPassword = proxyAccount.trim().length > 0 && proxyPassword.length > 0;
+  const currentQrCodeImageUrl = proxyResult?.verificationMethod === "qr" ? proxyResult.qrCodeImageUrl : null;
+  const shouldPollQrStatus =
+    proxyResult?.verificationMethod === "qr" &&
+    proxyResult.nextAction === "poll_qr_status" &&
+    !isTerminalProxyStatus(proxyResult);
 
   useEffect(() => {
     setSmsCountryCode((currentCountryCode) =>
@@ -129,6 +159,7 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   function resetProxyFlow() {
     setProxyLoginAttemptId(null);
     setProxyResult(null);
+    setCurrentFlowMode(null);
     setProxyAccount("");
     setProxyPassword("");
     setSmsPhoneNumber("");
@@ -175,7 +206,39 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
     }
   });
 
+  const qrStartMutation = useMutation({
+    onMutate: () => {
+      setCurrentFlowMode("qr");
+    },
+    mutationFn: async () => {
+      const loginAttemptId = await ensureProxyAttempt();
+      return startDoubanProxyQrLogin({ loginAttemptId });
+    },
+    onSuccess: async (result) => {
+      await handleProxyResult(result);
+    }
+  });
+
+  const qrStatusQuery = useQuery({
+    queryKey: ["douban-proxy-login-status", proxyLoginAttemptId, proxyResult?.qrCode ?? null],
+    queryFn: async () => getDoubanProxyLoginStatus(proxyLoginAttemptId!),
+    enabled: Boolean(proxyLoginAttemptId && shouldPollQrStatus),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: shouldPollQrStatus ? Math.max(1, proxyResult?.pollIntervalSeconds ?? 3) * 1000 : false
+  });
+
+  useEffect(() => {
+    if (!qrStatusQuery.data) {
+      return;
+    }
+    void handleProxyResult(qrStatusQuery.data);
+  }, [qrStatusQuery.data]);
+
   const smsSendMutation = useMutation({
+    onMutate: () => {
+      setCurrentFlowMode("sms");
+    },
     mutationFn: async () => {
       const loginAttemptId = await ensureProxyAttempt();
       return sendDoubanProxySmsCode({
@@ -191,6 +254,9 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   });
 
   const smsVerifyMutation = useMutation({
+    onMutate: () => {
+      setCurrentFlowMode("sms");
+    },
     mutationFn: async () => {
       const loginAttemptId = await ensureProxyAttempt();
       return verifyDoubanProxySmsCode({
@@ -204,6 +270,9 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   });
 
   const passwordLoginMutation = useMutation({
+    onMutate: () => {
+      setCurrentFlowMode("password");
+    },
     mutationFn: async () => {
       const loginAttemptId = await ensureProxyAttempt();
       return submitDoubanProxyPassword({
@@ -224,10 +293,13 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
   return {
     authQuery,
     proxyConfigQuery,
+    qrStatusQuery,
     supportedCountries,
     availableModes,
     proxyLoginEnabled,
     proxyResult,
+    currentFlowMode,
+    currentQrCodeImageUrl,
     cookie,
     setCookie,
     proxyAccount,
@@ -246,6 +318,7 @@ export function useDoubanLoginController({ onAuthenticated }: UseDoubanLoginCont
     canSendSmsCode,
     canVerifySmsCode,
     canSubmitPassword,
+    qrStartMutation,
     importMutation,
     smsSendMutation,
     smsVerifyMutation,

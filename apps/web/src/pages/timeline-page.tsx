@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import type { TimelineActionResponse, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
-import { getAuthMe, getTimeline, likeTimelineStatus, proxiedImageUrl, replyTimelineStatus, repostTimelineStatus } from "../api";
+import { ApiError, getAuthMe, getTimeline, likeTimelineStatus, proxiedImageUrl, replyTimelineStatus, repostTimelineStatus } from "../api";
 import { LoadingButtonLabel, LoadingInline, TimelineSkeletonList } from "../components/loading-state";
 import { useAutoLoadMore } from "../hooks/use-auto-load-more";
 
@@ -91,6 +91,13 @@ function applyTimelineActionResult(queryClient: ReturnType<typeof useQueryClient
   );
 }
 
+function refreshAuthIfNeeded(error: unknown, queryClient: ReturnType<typeof useQueryClient>) {
+  if (!(error instanceof ApiError) || error.status !== 401) {
+    return;
+  }
+  void queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+}
+
 function TimelineActionButton({
   label,
   count,
@@ -121,6 +128,7 @@ export function TimelinePage() {
     queryFn: getAuthMe,
     retry: false
   });
+  const sessionStatus = authQuery.data?.sessionStatus.status ?? "missing";
   const hasSession = authQuery.data?.authenticated && authQuery.data?.sessionStatus.status === "valid";
 
   const timelineQuery = useInfiniteQuery({
@@ -141,6 +149,9 @@ export function TimelinePage() {
     },
     onSuccess: (result) => {
       applyTimelineActionResult(queryClient, result);
+    },
+    onError: (error) => {
+      refreshAuthIfNeeded(error, queryClient);
     }
   });
 
@@ -157,11 +168,22 @@ export function TimelinePage() {
     onSuccess: (result) => {
       applyTimelineActionResult(queryClient, result);
       setDialog(null);
+    },
+    onError: (error) => {
+      refreshAuthIfNeeded(error, queryClient);
     }
   });
 
   const firstPage = timelineQuery.data?.pages[0];
   const items = timelineQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const timelineIsStale = Boolean(firstPage?.stale);
+  const timelineActionsDisabled = !hasSession || timelineIsStale || sessionStatus === "invalid";
+  const timelineNotice =
+    sessionStatus === "invalid"
+      ? "豆瓣登录已失效，请重新导入 Cookie 后重试。"
+      : timelineIsStale
+        ? "实时抓取失败，当前显示的是缓存动态。赞、回复和转发已禁用，请重新导入有效的豆瓣 Cookie 后重试。"
+        : null;
   const showTimelineSkeleton = timelineQuery.isFetching && items.length === 0;
   const showTimelineRefreshHint = timelineQuery.isFetchingNextPage;
   const autoLoadMoreRef = useAutoLoadMore({
@@ -191,7 +213,7 @@ export function TimelinePage() {
         <p className="supporting">聚合自己和关注的人的最近标记。</p>
       </section>
 
-      {firstPage?.stale ? <p className="notice">实时抓取失败，当前显示最近一次缓存。</p> : null}
+      {timelineNotice ? <p className="notice">{timelineNotice}</p> : null}
       {!hasSession ? (
         <section className="timeline-state-panel" role="status">
           <strong>登录后查看动态</strong>
@@ -283,7 +305,7 @@ export function TimelinePage() {
                       label="赞"
                       count={likeCount}
                       active={userLikeState === "liked"}
-                      disabled={!availableActions.like || !item.detailUrl || likePending || dialogPending}
+                      disabled={timelineActionsDisabled || !availableActions.like || !item.detailUrl || likePending || dialogPending}
                       onClick={() => likeMutation.mutate(item)}
                     />
                   </span>
@@ -291,7 +313,7 @@ export function TimelinePage() {
                     <TimelineActionButton
                       label="回复"
                       count={replyCount}
-                      disabled={!availableActions.reply || !item.detailUrl || likePending || dialogPending}
+                      disabled={timelineActionsDisabled || !availableActions.reply || !item.detailUrl || likePending || dialogPending}
                       onClick={() => setDialog({ item, mode: "reply", text: "" })}
                     />
                   </span>
@@ -299,7 +321,7 @@ export function TimelinePage() {
                     <TimelineActionButton
                       label="转发"
                       count={repostCount}
-                      disabled={!availableActions.repost || !item.detailUrl || likePending || dialogPending}
+                      disabled={timelineActionsDisabled || !availableActions.repost || !item.detailUrl || likePending || dialogPending}
                       onClick={() => setDialog({ item, mode: "repost", text: "" })}
                     />
                   </span>

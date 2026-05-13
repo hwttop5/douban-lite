@@ -34,6 +34,8 @@ export function SubjectCard({ medium, subject, item, extra, className = "subject
   const externalUrl = typeof subject.metadata.externalUrl === "string" ? subject.metadata.externalUrl : null;
   const externalOnly = subject.metadata.externalOnly === "true";
   const coverUrl = proxiedImageUrl(subject.coverUrl);
+  const scoreLabel = subject.averageRating ? `豆瓣 ${subject.averageRating.toFixed(1)}` : externalOnly ? "豆瓣外链" : "暂无豆瓣评分";
+  const creatorLabel = subject.creators.length > 0 ? subject.creators.join(" / ") : null;
   const detailState = location.pathname.startsWith("/rankings") || location.pathname.startsWith("/search") || location.pathname.startsWith("/me")
     ? { from: location.pathname }
     : undefined;
@@ -49,8 +51,8 @@ export function SubjectCard({ medium, subject, item, extra, className = "subject
         </div>
         {subject.subtitle ? <p className="subject-card__subtitle">{subject.subtitle}</p> : null}
         <p className="subject-card__meta">
-          {subject.averageRating ? `豆瓣 ${subject.averageRating.toFixed(1)}` : externalOnly ? "豆瓣外链" : "暂无豆瓣评分"}
-          {subject.creators.length > 0 ? ` · ${subject.creators.join(" / ")}` : ""}
+          <span className="subject-card__meta-score">{scoreLabel}</span>
+          {creatorLabel ? <span className="subject-card__meta-details">{creatorLabel}</span> : null}
         </p>
         {externalOnly ? <span className="tag tag--external">外部</span> : null}
         {item ? (

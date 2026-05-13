@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { DoubanSessionStatus, SyncJobRecord } from "../../../../packages/shared/src";
 import { getAuthMe, getSyncJob, logoutDoubanSession, triggerManualSync } from "../api";
 import { useAppContext } from "../app-context";
 import { LoadingButtonLabel, LoadingInline, PanelLoading } from "../components/loading-state";
+import { buildLoginPath, getRelativeLocation } from "../login-routing";
 
 const sessionStatusLabels: Record<DoubanSessionStatus["status"], string> = {
   valid: "正常",
@@ -28,6 +30,8 @@ async function triggerAndWaitForSync() {
 }
 
 export function SettingsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const { showTimelineNav, setShowTimelineNav, showRankingsNav, setShowRankingsNav } = useAppContext();
@@ -172,8 +176,14 @@ export function SettingsPage() {
                 <button
                   className="secondary-button"
                   type="button"
-                  onClick={() => syncMutation.mutate()}
-                  disabled={sessionStatus !== "valid" || syncMutation.isPending}
+                  onClick={() => {
+                    if (sessionStatus !== "valid") {
+                      navigate(buildLoginPath(getRelativeLocation(location)));
+                      return;
+                    }
+                    syncMutation.mutate();
+                  }}
+                  disabled={sessionStatus === "valid" && syncMutation.isPending}
                 >
                   {sessionStatus !== "valid" ? "请先登录" : syncMutation.isPending ? <LoadingButtonLabel label="同步中" /> : "立即同步"}
                 </button>
