@@ -26,6 +26,22 @@ interface MockSubject {
   blurb: string;
 }
 
+interface MockTimelineState {
+  id: string;
+  peopleId: string;
+  author: string;
+  actionText: string;
+  content: string;
+  createdAtText: string;
+  subjectMedium: Medium;
+  engagements: {
+    reply: number;
+    repost: number;
+    like: number;
+  };
+  liked: boolean;
+}
+
 const subjects: Record<Medium, MockSubject> = {
   movie: {
     medium: "movie",
@@ -322,25 +338,124 @@ function renderTop250RankingPage(subject: MockSubject, start = 0) {
   </body></html>`;
 }
 
-function renderTimeline(scope: "following" | "mine", peopleId = "demo-user", start = 0) {
+function createTimelineState(scope: "following" | "mine", peopleId: string, number: number): MockTimelineState {
+  const mediums: Medium[] = ["book", "movie", "music", "game"];
+  const subjectMedium = mediums[(number - 1) % mediums.length];
+  const actionVariants = ["在读", "读过", "说："] as const;
+  const actionText = actionVariants[(number - 1) % actionVariants.length];
+  return {
+    id: `${scope}-${number}`,
+    peopleId,
+    author: scope === "mine" ? "ttop5" : number === 1 ? "好友 A" : `好友 ${number}`,
+    actionText,
+    content: actionText === "说：" ? `今天的内容补一句主观看法 ${number}` : `这次标记记录来自第 ${number} 条动态。`,
+    createdAtText: startDateText(number),
+    subjectMedium,
+    engagements: {
+      reply: 2,
+      repost: 1,
+      like: 5
+    },
+    liked: number % 2 === 0
+  };
+}
+
+function startDateText(number: number) {
+  const day = String(((number - 1) % 28) + 1).padStart(2, "0");
+  return `05-${day}`;
+}
+
+function ensureTimelineState(timelineStates: Map<string, MockTimelineState>, scope: "following" | "mine", peopleId: string, number: number) {
+  const id = `${scope}-${number}`;
+  const existing = timelineStates.get(id);
+  if (existing) {
+    return existing;
+  }
+  const created = createTimelineState(scope, peopleId, number);
+  timelineStates.set(id, created);
+  return created;
+}
+
+function ensureTimelineStateById(timelineStates: Map<string, MockTimelineState>, peopleId: string, statusId: string) {
+  const existing = timelineStates.get(statusId);
+  if (existing) {
+    return existing;
+  }
+  const match = statusId.match(/^(following|mine)-(\d+)$/);
+  if (match) {
+    return ensureTimelineState(timelineStates, match[1] as "following" | "mine", peopleId, Number(match[2]));
+  }
+  const created: MockTimelineState = {
+    id: statusId,
+    peopleId,
+    author: "ttop5",
+    actionText: "说：",
+    content: "补充的默认动态。",
+    createdAtText: "05-05",
+    subjectMedium: "book",
+    engagements: { reply: 0, repost: 0, like: 0 },
+    liked: false
+  };
+  timelineStates.set(statusId, created);
+  return created;
+}
+
+function renderTimelineActions(status: MockTimelineState, detailMode = false) {
+  if (detailMode) {
+    return `
+      <div class="timeline-actions">
+        <form class="${status.liked ? "status-unlike-form" : "status-like-form"}" method="post" action="/j/status/${status.liked ? "unlike" : "like"}">
+          <input type="hidden" name="sid" value="${status.id}" />
+          <input type="hidden" name="ck" value="mock-ck" />
+          <button type="submit" aria-label="${status.liked ? "已赞" : "赞"}"></button>
+        </form>
+        <form class="status-reply-form" method="post" action="/j/status/reply">
+          <input type="hidden" name="sid" value="${status.id}" />
+          <input type="hidden" name="ck" value="mock-ck" />
+          <textarea name="reply_text"></textarea>
+          <button type="submit" aria-label="回应"></button>
+        </form>
+        <form class="status-repost-form" method="post" action="/j/status/repost">
+          <input type="hidden" name="sid" value="${status.id}" />
+          <input type="hidden" name="ck" value="mock-ck" />
+          <textarea name="repost_text"></textarea>
+          <button type="submit" aria-label="转发"></button>
+        </form>
+        <span>${status.engagements.reply} 回应</span><span>${status.engagements.repost} 转发</span><span>${status.engagements.like} 赞</span>
+      </div>`;
+  }
+  return `
+    <div class="timeline-actions">
+      <a class="timeline-action ${status.liked ? "timeline-action--liked" : "timeline-action--like"}" href="/j/status/${status.liked ? "unlike" : "like"}?sid=${status.id}" aria-label="${status.liked ? "已赞" : "赞"}"></a>
+      <a class="timeline-action timeline-action--reply" href="/j/status/reply?sid=${status.id}" aria-label="回应"></a>
+      <a class="timeline-action timeline-action--repost" href="/j/status/repost?sid=${status.id}" aria-label="转发"></a>
+      <span>${status.engagements.reply} 回应</span><span>${status.engagements.repost} 转发</span><span>${status.engagements.like} 赞</span>
+    </div>`;
+}
+
+function renderTimelineStatus(status: MockTimelineState, detailMode = false) {
+  const subject = subjects[status.subjectMedium];
+  const subjectUrl = status.subjectMedium === "game" ? `/game/${subject.doubanId}/` : `/${status.subjectMedium}/subject/${subject.doubanId}/`;
+  return `
+    <div class="new-status status-wrapper" data-sid="${status.id}">
+      <div class="status-item" data-sid="${status.id}" data-action="${status.actionText}">
+        <a href="/people/${status.peopleId}/"><img src="/avatar.jpg" />${status.author}</a>
+        <p class="status-saying">${status.author} ${status.actionText}</p>
+        <blockquote>${status.content}</blockquote>
+        <a href="${subjectUrl}"><img src="${subject.cover}" />${subject.title}</a>
+        <a href="/people/${status.peopleId}/status/${status.id}/">${status.createdAtText}</a>
+        ${renderTimelineActions(status, detailMode)}
+      </div>
+    </div>`;
+}
+
+function renderTimeline(timelineStates: Map<string, MockTimelineState>, scope: "following" | "mine", peopleId = "demo-user", start = 0) {
   const count = start === 0 ? 30 : 10;
   return `
   <html><body>
     ${Array.from({ length: count }, (_, index) => {
       const number = start + index + 1;
-      const id = `${scope}-${number}`;
-      const author = scope === "mine" ? "?" : number === 1 ? "?? A" : `?? ${number}`;
-      return `
-      <div class="new-status status-wrapper" data-sid="${id}">
-        <div class="status-item" data-sid="${id}" data-action="????">
-          <a href="/people/${peopleId}/"><img src="/avatar.jpg" />${author}</a>
-          <p class="status-saying">${author} ????</p>
-          <blockquote>??????????????????????????????${number}</blockquote>
-          <a href="/movie/subject/${subjects.movie.doubanId}/"><img src="${subjects.movie.cover}" />${subjects.movie.title}</a>
-          <a href="/people/${peopleId}/status/${id}/">?? ${String(12 + (number % 10)).padStart(2, "0")}:00</a>
-          <span>2 ??</span><span>1 ??</span><span>5 ?</span>
-        </div>
-      </div>`;
+      return renderTimelineStatus(ensureTimelineState(timelineStates, scope, peopleId, number));
     }).join("")}
   </body></html>`;
 }
@@ -348,6 +463,10 @@ function renderTimeline(scope: "following" | "mine", peopleId = "demo-user", sta
 export async function createMockDoubanServer() {
   const app = express();
   app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  const sentSmsCodes = new Map<string, string>();
+  const hasValidCsrf = (request: express.Request) =>
+    String(request.headers["x-csrf-token"] ?? "") === String(request.body.ck ?? "");
 
   const states = new Map<string, MockRemoteState>();
   (Object.values(subjects) as MockSubject[]).forEach((subject) => {
@@ -359,9 +478,88 @@ export async function createMockDoubanServer() {
       syncToTimeline: true
     });
   });
+  const timelineStates = new Map<string, MockTimelineState>();
 
   app.get("/", (request, response) => {
-    response.send(renderTimeline("following", "demo-user", Number(request.query.start ?? 0)));
+    response.send(renderTimeline(timelineStates, "following", "demo-user", Number(request.query.start ?? 0)));
+  });
+
+  app.get("/passport/login", (_request, response) => {
+    response.setHeader("Set-Cookie", ["bid=mock-bid; Path=/", "ck=mock-guest-ck; Path=/"]);
+    response.send(`
+      <html><body>
+        <script>window._CONFIG = {"douban_account":"http://mock.local","supported_countries":"[[&quot;中国&quot;,&quot;China&quot;,&quot;+86&quot;,&quot;CN&quot;],[&quot;美国&quot;,&quot;United States&quot;,&quot;+1&quot;,&quot;US&quot;]]"};</script>
+        <div id="account"></div>
+      </body></html>
+    `);
+  });
+
+  app.post("/j/mobile/login/basic", (request, response) => {
+    if (!hasValidCsrf(request)) {
+      response.status(403).json({ status: "failed", message: "csrf_invalid", localized_message: "请求校验失败" });
+      return;
+    }
+    const account = String(request.body.name ?? "");
+    const password = String(request.body.password ?? "");
+    if (account === "captcha@example.com") {
+      response.json({ status: "failed", message: "captcha_required", description: "需要图形验证" });
+      return;
+    }
+    if (account === "blocked@example.com") {
+      response.json({ status: "failed", message: "uncommon_loc_login", description: "需要安全验证" });
+      return;
+    }
+    if (account !== "demo@example.com" || password !== "secret") {
+      response.json({ status: "failed", message: "账号或密码错误" });
+      return;
+    }
+    response.setHeader("Set-Cookie", ["dbcl2=mock-dbcl2; Path=/", "ck=mock-ck; Path=/"]);
+    response.json({ status: "success", payload: { account } });
+  });
+
+  app.post("/j/mobile/login/request_phone_code", (request, response) => {
+    if (!hasValidCsrf(request) || String(request.body.analytics ?? "") !== "analytics_log") {
+      response.status(403).json({ status: "failed", message: "csrf_invalid", localized_message: "请求校验失败" });
+      return;
+    }
+    const areaCode = String(request.body.area_code ?? "");
+    const number = String(request.body.number ?? "");
+    if (number === "13800138002") {
+      response.json({ status: "failed", message: "captcha_required", description: "需要图形验证" });
+      return;
+    }
+    if (number === "13800138003") {
+      response.json({ status: "failed", message: "uncommon_loc_login", description: "需要安全验证" });
+      return;
+    }
+    if (number !== "13800138001") {
+      response.json({ status: "failed", message: "invalid_phone", localized_message: "手机号不正确" });
+      return;
+    }
+    sentSmsCodes.set(`${areaCode}${number}`, "246810");
+    response.setHeader("Set-Cookie", ["ck=mock-ck; Path=/"]);
+    response.json({ status: "success", payload: { areaCode, number } });
+  });
+
+  app.post("/j/mobile/login/verify_phone_code", (request, response) => {
+    if (!hasValidCsrf(request)) {
+      response.status(403).json({ status: "failed", message: "csrf_invalid", localized_message: "请求校验失败" });
+      return;
+    }
+    const areaCode = String(request.body.area_code ?? "");
+    const number = String(request.body.number ?? "");
+    const code = String(request.body.code ?? "");
+    const expectedCode = sentSmsCodes.get(`${areaCode}${number}`);
+    if (!expectedCode) {
+      response.json({ status: "failed", message: "invalid_phone", localized_message: "请先获取验证码" });
+      return;
+    }
+    if (code !== expectedCode) {
+      response.json({ status: "failed", message: "invalid_code", localized_message: "验证码错误" });
+      return;
+    }
+    response.setHeader("Set-Cookie", ["dbcl2=mock-dbcl2; Path=/", "ck=mock-ck; Path=/"]);
+    response.json({ status: "success", payload: { account_info: { id: "demo-user", phone: `${areaCode}${number}` }, vtoken: "mock-vtoken" } });
   });
 
   app.get("/mine/", (_request, response) => {
@@ -372,8 +570,13 @@ export async function createMockDoubanServer() {
     response.send(`<html><body><a href="/people/${request.params.peopleId}/">${request.params.peopleId}</a></body></html>`);
   });
 
+  app.get("/people/:peopleId/status/:statusId/", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, request.params.peopleId, request.params.statusId);
+    response.send(`<html><body>${renderTimelineStatus(state, true)}</body></html>`);
+  });
+
   app.get("/people/:peopleId/statuses", (request, response) => {
-    response.send(renderTimeline("mine", request.params.peopleId, Number(request.query.start ?? 0)));
+    response.send(renderTimeline(timelineStates, "mine", request.params.peopleId, Number(request.query.start ?? 0)));
   });
 
   app.get("/images/:name", (_request, response) => {
@@ -383,6 +586,29 @@ export async function createMockDoubanServer() {
   app.get("/search", (request, response) => {
     const medium = request.query.medium as Medium;
     response.send(renderSearch(subjects[medium]));
+  });
+
+  app.get("/j/search_subjects", (_request, response) => {
+    response.json({
+      subjects: [
+        {
+          id: subjects.movie.doubanId,
+          title: subjects.movie.title,
+          url: `https://movie.douban.com/subject/${subjects.movie.doubanId}/`,
+          cover: subjects.movie.cover,
+          rate: subjects.movie.rating
+        }
+      ]
+    });
+  });
+
+  app.get("/movie/board/:board", (request, response) => {
+    const board = String(request.params.board);
+    if (board === "hot-movies" || board === "hot-tv") {
+      response.send(renderRanking(subjects.movie));
+      return;
+    }
+    response.send(renderRanking(subjects.movie));
   });
 
   app.get("/:medium/board/:board", (request, response) => {
@@ -441,6 +667,38 @@ export async function createMockDoubanServer() {
 
   app.get("/game/:doubanId/comments", (request, response) => {
     response.send(renderComments(subjects.game, Number(request.query.start ?? 0), Number(request.query.limit ?? 20)));
+  });
+
+  app.post("/j/status/like", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
+    if (!state.liked) {
+      state.liked = true;
+      state.engagements.like += 1;
+    }
+    response.json({ ok: true });
+  });
+
+  app.post("/j/status/unlike", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
+    if (state.liked) {
+      state.liked = false;
+      state.engagements.like = Math.max(0, state.engagements.like - 1);
+    }
+    response.json({ ok: true });
+  });
+
+  app.post("/j/status/reply", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
+    if (String(request.body.reply_text ?? "").trim().length > 0) {
+      state.engagements.reply += 1;
+    }
+    response.json({ ok: true });
+  });
+
+  app.post("/j/status/repost", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
+    state.engagements.repost += 1;
+    response.json({ ok: true });
   });
 
   app.post("/:medium/subject/:doubanId/interest", (request, response) => {
@@ -502,6 +760,9 @@ export async function createMockDoubanServer() {
     readState(medium: Medium) {
       const subject = subjects[medium];
       return states.get(`${medium}:${subject.doubanId}`)!;
+    },
+    readTimelineState(statusId: string) {
+      return timelineStates.get(statusId) ?? null;
     },
     setState(medium: Medium, nextState: Partial<MockRemoteState>) {
       const subject = subjects[medium];

@@ -1,6 +1,32 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import { VitePWA } from "vite-plugin-pwa";
+
+const workspaceRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const devTargetsFile = join(workspaceRoot, ".codex-run", "dev-targets.json");
+const defaultApiProxyTarget = "http://127.0.0.1:8787";
+
+function resolveApiProxyTarget() {
+  const explicitTarget = process.env.VITE_API_PROXY_TARGET?.trim();
+  if (explicitTarget) {
+    return explicitTarget;
+  }
+  try {
+    const raw = readFileSync(devTargetsFile, "utf8");
+    const parsed = JSON.parse(raw) as { apiTarget?: unknown };
+    if (typeof parsed.apiTarget === "string" && /^https?:\/\//.test(parsed.apiTarget)) {
+      return parsed.apiTarget;
+    }
+  } catch {
+    // Fall back to the documented default when no local API marker is available.
+  }
+  return defaultApiProxyTarget;
+}
+
+const apiProxyTarget = resolveApiProxyTarget();
 
 export default defineConfig({
   plugins: [
@@ -50,11 +76,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:8787",
+        target: apiProxyTarget,
         changeOrigin: true
       },
       "/health": {
-        target: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:8787",
+        target: apiProxyTarget,
         changeOrigin: true
       }
     }

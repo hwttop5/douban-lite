@@ -160,6 +160,87 @@ export interface DoubanLoginResponse {
   sessionStatus: DoubanSessionStatus;
 }
 
+export const doubanProxyLoginStatuses = [
+  "created",
+  "submitting",
+  "needs_verification",
+  "authorized",
+  "claimed",
+  "blocked",
+  "failed",
+  "expired",
+  "cancelled"
+] as const;
+export type DoubanProxyLoginStatus = (typeof doubanProxyLoginStatuses)[number];
+
+export const doubanProxyLoginModes = ["sms", "password"] as const;
+export type DoubanProxyLoginMode = (typeof doubanProxyLoginModes)[number];
+
+export const doubanProxyVerificationMethods = ["none", "sms", "captcha"] as const;
+export type DoubanProxyVerificationMethod = (typeof doubanProxyVerificationMethods)[number];
+
+export const doubanProxyLoginNextActions = [
+  "none",
+  "send_sms",
+  "enter_sms_code",
+  "enter_password",
+  "wait_retry",
+  "use_cookie_import"
+] as const;
+export type DoubanProxyLoginNextAction = (typeof doubanProxyLoginNextActions)[number];
+
+export const doubanProxyLoginFallbacks = ["cookie_import"] as const;
+export type DoubanProxyLoginFallback = (typeof doubanProxyLoginFallbacks)[number];
+
+export type DoubanProxyLoginErrorCode =
+  | "proxy_login_disabled"
+  | "attempt_not_found"
+  | "attempt_expired"
+  | "invalid_credentials"
+  | "invalid_sms_code"
+  | "needs_captcha"
+  | "needs_sms"
+  | "sms_cooldown"
+  | "registration_required"
+  | "security_challenge"
+  | "douban_unavailable"
+  | "login_not_verified";
+
+export interface DoubanSupportedCountry {
+  label: string;
+  englishLabel: string;
+  areaCode: string;
+  countryCode: string;
+}
+
+export interface DoubanProxyLoginConfigResponse {
+  enabled: boolean;
+  supportedCountries: DoubanSupportedCountry[];
+  defaultCountryCode: string;
+  availableModes: DoubanProxyLoginMode[];
+}
+
+export interface DoubanProxyLoginStartResponse {
+  loginAttemptId: string;
+  status: DoubanProxyLoginStatus;
+  expiresAt: string;
+  nextAction: DoubanProxyLoginNextAction;
+  verificationMethod: DoubanProxyVerificationMethod;
+  maskedTarget: string | null;
+  retryAfterSeconds: number | null;
+  availableFallbacks: DoubanProxyLoginFallback[];
+}
+
+export interface DoubanProxyLoginStatusResponse extends DoubanProxyLoginStartResponse {
+  errorCode: DoubanProxyLoginErrorCode | null;
+  message: string | null;
+}
+
+export interface DoubanProxyLoginSubmitResponse extends DoubanProxyLoginStatusResponse {
+  user?: AppUser;
+  sessionStatus?: DoubanSessionStatus;
+}
+
 export interface OverviewTotal {
   medium: Medium;
   status: ShelfStatus;
@@ -242,6 +323,14 @@ export interface TimelineEngagement {
   count: number | null;
 }
 
+export type TimelineLikeState = "liked" | "not_liked" | "unknown";
+
+export interface TimelineAvailableActions {
+  like: boolean;
+  reply: boolean;
+  repost: boolean;
+}
+
 export interface TimelineItem {
   id: string;
   authorName: string | null;
@@ -256,6 +345,8 @@ export interface TimelineItem {
   subjectCoverUrl: string | null;
   photoUrls: string[];
   engagements: TimelineEngagement[];
+  userLikeState: TimelineLikeState;
+  availableActions: TimelineAvailableActions;
 }
 
 export interface TimelineResponse {
@@ -296,8 +387,26 @@ export const syncJobTypeSchema = z.enum(syncJobTypes);
 export const timelineScopeSchema = z.enum(timelineScopes);
 
 export const importDoubanSessionSchema = z.object({
-  cookie: z.string().min(10, "cookie looks too short"),
+  cookie: z.string().min(10, "Cookie 长度看起来不够"),
   peopleId: z.string().trim().min(1).optional()
+});
+
+export const doubanProxyLoginPasswordSchema = z.object({
+  loginAttemptId: z.string().trim().min(1),
+  account: z.string().trim().min(1, "账号不能为空").max(200),
+  password: z.string().min(1, "密码不能为空").max(200),
+  countryCode: z.string().trim().max(10).optional()
+});
+
+export const doubanProxyLoginSmsSendSchema = z.object({
+  loginAttemptId: z.string().trim().min(1),
+  phoneNumber: z.string().trim().min(1, "手机号不能为空").max(32),
+  countryCode: z.string().trim().max(10).optional()
+});
+
+export const doubanProxyLoginSmsVerifySchema = z.object({
+  loginAttemptId: z.string().trim().min(1),
+  smsCode: z.string().trim().min(1, "SMS 验证码不能为空").max(20)
 });
 
 export const updateLibraryStateSchema = z.object({
@@ -311,6 +420,24 @@ export const updateLibraryStateSchema = z.object({
 export const subjectCommentVoteSchema = z.object({
   commentId: z.string().trim().min(1)
 });
+
+export const timelineActionTargetSchema = z.object({
+  detailUrl: z.string().trim().url()
+});
+
+export const timelineReplySchema = timelineActionTargetSchema.extend({
+  text: z.string().trim().min(1, "回复内容不能为空").max(1000)
+});
+
+export const timelineRepostSchema = timelineActionTargetSchema.extend({
+  text: z.string().trim().max(1000).optional()
+});
+
+export interface TimelineActionResponse {
+  statusId: string;
+  engagements: TimelineEngagement[];
+  userLikeState?: Exclude<TimelineLikeState, "unknown">;
+}
 
 export type UpdateLibraryStateInput = z.infer<typeof updateLibraryStateSchema>;
 

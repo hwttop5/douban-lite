@@ -5,6 +5,8 @@ import { mediumLabels, mediums } from "../../../packages/shared/src";
 import { getAuthMe, proxiedImageUrl } from "./api";
 import { AppContextProvider, useAppContext } from "./app-context";
 import { SegmentedControl } from "./components/segmented-control";
+import { buildLoginPath, getRelativeLocation } from "./login-routing";
+import { LoginPage } from "./pages/login-page";
 import { MyPage } from "./pages/my-page";
 import { RankingsPage } from "./pages/rankings-page";
 import { SearchPage } from "./pages/search-page";
@@ -50,10 +52,11 @@ function AppNavigation() {
     retry: false
   });
   const showMediumPicker =
+    !location.pathname.startsWith("/login") &&
     !location.pathname.startsWith("/settings") &&
     !location.pathname.startsWith("/timeline") &&
     !location.pathname.startsWith("/subject/");
-  const showBottomNav = !location.pathname.startsWith("/subject/");
+  const showBottomNav = !location.pathname.startsWith("/subject/") && !location.pathname.startsWith("/login");
 
   useEffect(() => {
     if (!showTimelineNav && location.pathname.startsWith("/timeline")) {
@@ -71,6 +74,11 @@ function AppNavigation() {
   const avatarUrl = hasDoubanSession ? proxiedImageUrl(user?.avatarUrl ?? session?.avatarUrl) : null;
   const accountLabel = hasDoubanSession ? (user?.displayName ?? session?.displayName ?? "豆瓣用户") : "未登录";
   const accountMeta = hasDoubanSession ? `${user?.ipLocation ?? session?.ipLocation ?? "未知地区"} / 已登录 / 同步可用` : "导入自己的豆瓣 Cookie 后使用";
+  const accountTarget = hasDoubanSession
+    ? "/settings"
+    : location.pathname.startsWith("/login")
+      ? "/login"
+      : buildLoginPath(getRelativeLocation(location));
   const mediumPicker = showMediumPicker ? (
     <SegmentedControl
       value={medium}
@@ -97,7 +105,7 @@ function AppNavigation() {
           <NavItem to="/me" icon="me" label="我的" variant="sidebar" />
           <NavItem to="/settings" icon="settings" label="设置" variant="sidebar" />
         </nav>
-        <button className="desktop-sidebar__account" type="button" onClick={() => navigate("/settings")}>
+        <button className="desktop-sidebar__account" type="button" onClick={() => navigate(accountTarget)}>
           <span className="desktop-sidebar__avatar">
             {avatarUrl ? <img src={avatarUrl} alt="" /> : accountLabel.slice(0, 1)}
           </span>
@@ -116,6 +124,7 @@ function AppNavigation() {
           <Route path="/me" element={<MyPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/rankings" element={<RankingsPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/subject/:medium/:doubanId" element={<SubjectDetailPage />} />
         </Routes>

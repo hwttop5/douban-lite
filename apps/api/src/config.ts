@@ -8,6 +8,10 @@ export interface AppConfig {
   webDistDir: string;
   doubanPublicBaseUrl: string;
   doubanWebBaseUrl: string;
+  doubanAccountsBaseUrl: string;
+  doubanProxyLoginEnabled: boolean;
+  doubanProxyLoginAttemptTtlMinutes: number;
+  doubanProxyLoginRateLimitPerIp: number;
   syncIntervalHours: number;
   disableAutoSync: boolean;
   appSecret: string;
@@ -31,6 +35,10 @@ export function loadConfig(env = process.env): AppConfig {
     webDistDir: env.WEB_DIST_DIR ?? join(process.cwd(), "apps", "web", "dist"),
     doubanPublicBaseUrl: env.DOUBAN_PUBLIC_BASE_URL ?? "https://m.douban.com",
     doubanWebBaseUrl: env.DOUBAN_WEB_BASE_URL ?? "https://www.douban.com",
+    doubanAccountsBaseUrl: env.DOUBAN_ACCOUNTS_BASE_URL ?? "https://accounts.douban.com",
+    doubanProxyLoginEnabled: env.DOUBAN_PROXY_LOGIN_ENABLED == null ? nodeEnv !== "production" : env.DOUBAN_PROXY_LOGIN_ENABLED === "true",
+    doubanProxyLoginAttemptTtlMinutes: Number(env.DOUBAN_PROXY_LOGIN_ATTEMPT_TTL_MINUTES ?? 10),
+    doubanProxyLoginRateLimitPerIp: Number(env.DOUBAN_PROXY_LOGIN_RATE_LIMIT_PER_IP ?? 5),
     syncIntervalHours: Number(env.SYNC_INTERVAL_HOURS ?? 12),
     disableAutoSync: env.DISABLE_AUTO_SYNC === "true",
     appSecret,

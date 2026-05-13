@@ -858,7 +858,17 @@ export class AppDatabase {
     }
     const items = parseJson<TimelineItem[]>(row.items_json, []).map((item) => ({
       ...item,
-      photoUrls: Array.isArray(item.photoUrls) ? item.photoUrls : []
+      photoUrls: Array.isArray(item.photoUrls) ? item.photoUrls : [],
+      engagements: Array.isArray(item.engagements) ? item.engagements : [],
+      userLikeState:
+        item.userLikeState === "liked" || item.userLikeState === "not_liked" || item.userLikeState === "unknown"
+          ? item.userLikeState
+          : "unknown",
+      availableActions: {
+        like: item.availableActions?.like ?? Boolean(item.detailUrl),
+        reply: item.availableActions?.reply ?? Boolean(item.detailUrl),
+        repost: item.availableActions?.repost ?? Boolean(item.detailUrl)
+      }
     }));
     return {
       scope,

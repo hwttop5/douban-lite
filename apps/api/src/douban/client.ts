@@ -1,4 +1,14 @@
-import type { Medium, RankingBoardConfig, RankingItem, ShelfStatus, SubjectComment, SubjectCommentsResponse, SubjectRecord, TimelineScope } from "../../../../packages/shared/src";
+import type {
+  Medium,
+  RankingBoardConfig,
+  RankingItem,
+  ShelfStatus,
+  SubjectComment,
+  SubjectCommentsResponse,
+  SubjectRecord,
+  TimelineActionResponse,
+  TimelineScope
+} from "../../../../packages/shared/src";
 import type { AppConfig } from "../config";
 import {
   parseAuthToken,
@@ -14,6 +24,7 @@ import {
   parseSubjectComments,
   parseSubjectDetail,
   parseSubjectDetailExtras,
+  parseTimelineActionContext,
   parseTimeline,
   parseUserCollection
 } from "./parsers";
@@ -30,6 +41,12 @@ interface VoteResult {
   commentId: string;
   votes: number;
   userVoteState: "voted" | "not_voted";
+}
+
+interface TimelineActionResolveResult {
+  authToken: string | null;
+  detailUrl: string;
+  context: NonNullable<ReturnType<typeof parseTimelineActionContext>>;
 }
 
 function readCookieValue(cookie: string, key: string) {
@@ -190,12 +207,25 @@ export class DoubanClient {
     return JSON.parse(text) as T;
   }
 
-  private async voteComment(url: string, commentId: string, cookie: string, referer: string): Promise<VoteResult> {
+  private async voteComment(url: string, commentId: string, cookie: string, referer: string, fallbackVotes: number): Promise<VoteResult> {
     const authToken = readCookieValue(cookie, "ck");
     if (!authToken) {
       throw new Error("Douban session is missing ck token.");
     }
-    const payload = await this.requestJson<{ msg?: string; r?: number; digg_n?: number }>(url, {
+    const payload = await this.requestJson<{
+      msg?: string;
+      r?: number;
+      digg_n?: number;
+      count?: number;
+      vote_count?: number;
+      useful_count?: number;
+      data?: {
+        digg_n?: number;
+        count?: number;
+        vote_count?: number;
+        useful_count?: number;
+      };
+    }>(url, {
       method: "POST",
       headers: {
         cookie,
@@ -211,10 +241,117 @@ export class DoubanClient {
     if (payload.r) {
       throw new Error(payload.msg ?? "Douban comment vote failed.");
     }
+    const nextVotes =
+      payload.digg_n ??
+      payload.count ??
+      payload.vote_count ??
+      payload.useful_count ??
+      payload.data?.digg_n ??
+      payload.data?.count ??
+      payload.data?.vote_count ??
+      payload.data?.useful_count ??
+      fallbackVotes + 1;
     return {
       commentId,
-      votes: payload.digg_n ?? 0,
+      votes: nextVotes,
       userVoteState: /cancel_vote/.test(url) ? "not_voted" : "voted"
+    };
+  }
+
+  private resolveTimelineTextField(form: TimelineActionResolveResult["context"]["replyForm"] | TimelineActionResolveResult["context"]["repostForm"]) {
+    if (!form) {
+      return null;
+    }
+    if (form.textFieldName) {
+      return form.textFieldName;
+    }
+    return (
+      Object.keys(form.defaultFields).find((key) => /(text|content|comment|reply|repost|status)/i.test(key)) ??
+      null
+    );
+  }
+
+  private buildTimelineActionBody(
+    form: NonNullable<TimelineActionResolveResult["context"]["likeForm"]>,
+    statusId: string,
+    authToken: string | null,
+    text?: string
+  ) {
+    const body = new URLSearchParams(form.defaultFields);
+    const knownStatusKeys = ["sid", "status_id", "statusid", "id"];
+    if (!knownStatusKeys.some((key) => body.has(key))) {
+      body.set("sid", statusId);
+      body.set("status_id", statusId);
+    }
+    if (authToken && !body.has("ck")) {
+      body.set("ck", authToken);
+    }
+    if (text !== undefined) {
+      const textField = this.resolveTimelineTextField(form);
+      if (!textField) {
+        throw new Error("Unable to resolve Douban timeline text field.");
+      }
+      body.set(textField, text);
+    }
+    return body;
+  }
+
+  private async readTimelineActionContext(statusId: string, detailUrl: string, cookie: string): Promise<TimelineActionResolveResult> {
+    const detailPage = await this.request(detailUrl, {
+      headers: {
+        cookie
+      }
+    });
+    const context = parseTimelineActionContext(detailPage.text, detailPage.url, statusId);
+    if (!context) {
+      throw new Error("Unable to resolve Douban timeline action context.");
+    }
+    return {
+      authToken: parseAuthToken(detailPage.text),
+      detailUrl: detailPage.url,
+      context
+    };
+  }
+
+  private async submitTimelineAction(
+    detailUrl: string,
+    form: NonNullable<TimelineActionResolveResult["context"]["likeForm"]>,
+    statusId: string,
+    cookie: string,
+    authToken: string | null,
+    text?: string
+  ): Promise<TimelineActionResponse> {
+    const body = this.buildTimelineActionBody(form, statusId, authToken, text);
+    if (form.method === "GET") {
+      const actionUrl = new URL(form.actionUrl);
+      body.forEach((value, key) => {
+        actionUrl.searchParams.set(key, value);
+      });
+      await this.request(actionUrl.toString(), {
+        headers: {
+          cookie,
+          referer: detailUrl,
+          "x-requested-with": "XMLHttpRequest"
+        }
+      });
+    } else {
+      await this.request(form.actionUrl, {
+        method: "POST",
+        headers: {
+          cookie,
+          referer: detailUrl,
+          origin: new URL(detailUrl).origin,
+          "x-requested-with": "XMLHttpRequest",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+        },
+        body
+      });
+    }
+    const refreshed = await this.readTimelineActionContext(statusId, detailUrl, cookie);
+    return {
+      statusId,
+      engagements: refreshed.context.engagements,
+      userLikeState: refreshed.context.userLikeState === "unknown" ? undefined : refreshed.context.userLikeState
     };
   }
 
@@ -347,7 +484,7 @@ export class DoubanClient {
         referer: this.authSubjectUrl(medium, doubanId)
       }
     });
-    const action = parseSubjectCommentVoteAction(text, commentId);
+    const action = parseSubjectCommentVoteAction(text, commentId, commentPageUrl);
     if (!action) {
       throw new Error("Unable to resolve Douban comment vote action.");
     }
@@ -362,11 +499,43 @@ export class DoubanClient {
       medium === "game"
         ? `${this.config.doubanWebBaseUrl}/game/${doubanId}/comments`
         : `${this.authBaseUrl(medium)}/subject/${doubanId}/comments`;
-    return this.voteComment(action.voteUrl, commentId, cookie, referer);
+    return this.voteComment(action.voteUrl, commentId, cookie, referer, action.votes);
+  }
+
+  async likeTimelineStatus(statusId: string, detailUrl: string, cookie: string): Promise<TimelineActionResponse> {
+    const resolved = await this.readTimelineActionContext(statusId, detailUrl, cookie);
+    const form =
+      resolved.context.userLikeState === "liked"
+        ? resolved.context.unlikeForm ?? resolved.context.likeForm
+        : resolved.context.likeForm ?? resolved.context.unlikeForm;
+    if (!form) {
+      throw new Error("Unable to resolve Douban timeline like action.");
+    }
+    return this.submitTimelineAction(resolved.detailUrl, form, statusId, cookie, resolved.authToken);
+  }
+
+  async replyTimelineStatus(statusId: string, detailUrl: string, text: string, cookie: string): Promise<TimelineActionResponse> {
+    const resolved = await this.readTimelineActionContext(statusId, detailUrl, cookie);
+    if (!resolved.context.replyForm) {
+      throw new Error("Unable to resolve Douban timeline reply action.");
+    }
+    return this.submitTimelineAction(resolved.detailUrl, resolved.context.replyForm, statusId, cookie, resolved.authToken, text.trim());
+  }
+
+  async repostTimelineStatus(statusId: string, detailUrl: string, text: string | undefined, cookie: string): Promise<TimelineActionResponse> {
+    const resolved = await this.readTimelineActionContext(statusId, detailUrl, cookie);
+    if (!resolved.context.repostForm) {
+      throw new Error("Unable to resolve Douban timeline repost action.");
+    }
+    return this.submitTimelineAction(resolved.detailUrl, resolved.context.repostForm, statusId, cookie, resolved.authToken, text?.trim() ?? "");
   }
 
   async getRanking(medium: Medium, board: RankingBoardConfig, cookie?: string) {
     if (board.sourceType === "movie_hot") {
+      if (this.usesCustomWebBase()) {
+        const { text, url: finalUrl } = await this.request(`${this.config.doubanPublicBaseUrl}/${medium}/board/${board.key}`, cookie ? { headers: { cookie } } : undefined);
+        return parseRanking(text, finalUrl, medium, board);
+      }
       const params = new URLSearchParams({
         type: board.key === "hot-tv" ? "tv" : "movie",
         tag: "热门",

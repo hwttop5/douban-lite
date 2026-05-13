@@ -5,11 +5,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Express, Request, Response } from "express";
 import {
-    importDoubanSessionSchema,
+  doubanProxyLoginPasswordSchema,
+  doubanProxyLoginSmsSendSchema,
+  doubanProxyLoginSmsVerifySchema,
+  importDoubanSessionSchema,
   mediumSchema,
   paginationSchema,
   shelfStatusSchema,
   subjectCommentVoteSchema,
+  timelineActionTargetSchema,
+  timelineReplySchema,
+  timelineRepostSchema,
   timelineScopeSchema,
   updateLibraryStateSchema
 } from "../../../packages/shared/src";
@@ -18,6 +24,7 @@ import { loadConfig } from "./config";
 import { AppDatabase } from "./db";
 import { DoubanClient } from "./douban/client";
 import { createSessionToken } from "./security";
+import { ProxyLoginAttemptNotFoundError, ProxyLoginService } from "./services/proxy-login";
 import { SyncService } from "./services/sync";
 
 const sessionCookieName = "douban_lite_session";
@@ -38,7 +45,7 @@ function badRequest(response: Response, message: string, issues?: unknown) {
   response.status(400).json({ error: message, issues });
 }
 
-function unauthorized(response: Response, message = "Authentication required") {
+function unauthorized(response: Response, message = "需要先登录。") {
   response.status(401).json({ error: message });
 }
 
@@ -133,6 +140,11 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
   const db = new AppDatabase(config.databaseFile);
   const client = new DoubanClient(config);
   const sync = new SyncService(db, client, config);
+  const proxyLogin = new ProxyLoginService(client, {
+    accountsBaseUrl: config.doubanAccountsBaseUrl,
+    attemptTtlMinutes: config.doubanProxyLoginAttemptTtlMinutes,
+    rateLimitPerIp: config.doubanProxyLoginRateLimitPerIp
+  });
   const app = express();
 
   app.use(
@@ -148,6 +160,20 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     next();
   });
 
+  async function finalizeAuthorizedProxyLogin(response: Response, result: { loginAttemptId: string; status: string; cookie?: string }) {
+    if (result.status !== "authorized" || !result.cookie) {
+      response.json(result);
+      return;
+    }
+    const token = createSessionToken();
+    const expiresAt = new Date(Date.now() + config.sessionTtlDays * 24 * 60 * 60 * 1000);
+    const payload = await sync.loginWithDoubanCookie({ cookie: result.cookie }, token, expiresAt.toISOString());
+    proxyLogin.claim(result.loginAttemptId);
+    writeSessionCookie(response, config, token, expiresAt);
+    const { cookie: _cookie, ...safeResult } = result;
+    response.json({ ...safeResult, status: "claimed", user: payload.user, sessionStatus: payload.sessionStatus });
+  }
+
   app.get("/health", (_request, response) => {
     response.json({
       status: "ok",
@@ -160,7 +186,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     try {
       const body = importDoubanSessionSchema.safeParse(request.body);
       if (!body.success) {
-        badRequest(response, "Invalid douban session payload", body.error.flatten());
+        badRequest(response, "Cookie 导入参数无效。", body.error.flatten());
         return;
       }
       const token = createSessionToken();
@@ -171,6 +197,112 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.get("/api/auth/douban/proxy/config", async (_request, response, next) => {
+    try {
+      response.json({
+        enabled: config.doubanProxyLoginEnabled,
+        ...(await proxyLogin.getClientConfig())
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/douban/proxy/start", async (request, response, next) => {
+    if (!config.doubanProxyLoginEnabled) {
+      response.status(403).json({ error: "代理豆瓣登录未启用。" });
+      return;
+    }
+    try {
+      response.json(await proxyLogin.start(request.ip ?? "unknown"));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/auth/douban/proxy/:loginAttemptId/status", (request, response) => {
+    const status = proxyLogin.getStatus(routeParam(request.params.loginAttemptId));
+    if (!status) {
+      response.status(404).json({ error: "代理登录会话不存在。" });
+      return;
+    }
+    response.json(status);
+  });
+
+  app.post("/api/auth/douban/proxy/password", async (request, response, next) => {
+    if (!config.doubanProxyLoginEnabled) {
+      response.status(403).json({ error: "代理豆瓣登录未启用。" });
+      return;
+    }
+    try {
+      const body = doubanProxyLoginPasswordSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "代理密码登录参数无效。", body.error.flatten());
+        return;
+      }
+      const result = await proxyLogin.submitPassword(body.data);
+      await finalizeAuthorizedProxyLogin(response, result);
+    } catch (error) {
+      if (error instanceof ProxyLoginAttemptNotFoundError) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/douban/proxy/sms/send", async (request, response, next) => {
+    if (!config.doubanProxyLoginEnabled) {
+      response.status(403).json({ error: "代理豆瓣登录未启用。" });
+      return;
+    }
+    try {
+      const body = doubanProxyLoginSmsSendSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "SMS 发码参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await proxyLogin.sendSmsCode(body.data));
+    } catch (error) {
+      if (error instanceof ProxyLoginAttemptNotFoundError) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/douban/proxy/sms/verify", async (request, response, next) => {
+    if (!config.doubanProxyLoginEnabled) {
+      response.status(403).json({ error: "代理豆瓣登录未启用。" });
+      return;
+    }
+    try {
+      const body = doubanProxyLoginSmsVerifySchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "SMS 验证码参数无效。", body.error.flatten());
+        return;
+      }
+      const result = await proxyLogin.verifySmsCode(body.data);
+      await finalizeAuthorizedProxyLogin(response, result);
+    } catch (error) {
+      if (error instanceof ProxyLoginAttemptNotFoundError) {
+        response.status(404).json({ error: "代理登录会话不存在。" });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/douban/proxy/:loginAttemptId/cancel", (request, response) => {
+    const status = proxyLogin.cancel(routeParam(request.params.loginAttemptId));
+    if (!status) {
+      response.status(404).json({ error: "代理登录会话不存在。" });
+      return;
+    }
+    response.json(status);
   });
 
   app.get("/api/auth/me", (request: AuthenticatedRequest, response) => {
@@ -205,7 +337,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const status = request.query.status == null ? null : shelfStatusSchema.safeParse(request.query.status);
       const pagination = paginationSchema.safeParse(request.query);
       if (!medium.success || (status != null && !status.success) || !pagination.success) {
-        badRequest(response, "Invalid library query", {
+        badRequest(response, "书影音列表请求参数无效。", {
           medium: medium.success ? null : medium.error.flatten(),
           status: status == null || status.success ? null : status.error.flatten(),
           pagination: pagination.success ? null : pagination.error.flatten()
@@ -223,7 +355,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const medium = mediumSchema.safeParse(request.query.medium);
       const query = String(request.query.q ?? "").trim();
       if (!medium.success || query.length === 0) {
-        badRequest(response, "Invalid search query");
+        badRequest(response, "搜索参数无效。");
         return;
       }
       response.json(await sync.searchSubjects(request.currentUserId ?? null, medium.data, query));
@@ -238,7 +370,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const start = Math.max(0, Number(request.query.start ?? 0));
       const limit = Math.min(50, Math.max(1, Number(request.query.limit ?? 20)));
       if (!medium.success || !Number.isFinite(start) || !Number.isFinite(limit)) {
-        badRequest(response, "Invalid comments query");
+        badRequest(response, "短评请求参数无效。");
         return;
       }
       response.json(await sync.getSubjectComments(request.currentUserId ?? null, medium.data, routeParam(request.params.doubanId), Math.floor(start), Math.floor(limit)));
@@ -256,7 +388,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const medium = mediumSchema.safeParse(request.params.medium);
       const body = subjectCommentVoteSchema.safeParse(request.body);
       if (!medium.success || !body.success) {
-        badRequest(response, "Invalid comment vote payload", {
+        badRequest(response, "短评投票参数无效。", {
           medium: medium.success ? null : medium.error.flatten(),
           body: body.success ? null : body.error.flatten()
         });
@@ -272,7 +404,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     try {
       const medium = mediumSchema.safeParse(request.params.medium);
       if (!medium.success) {
-        badRequest(response, "Invalid medium");
+        badRequest(response, "媒介类型无效。");
         return;
       }
       response.json(await sync.getSubjectDetail(request.currentUserId ?? null, medium.data, routeParam(request.params.doubanId)));
@@ -286,7 +418,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const medium = mediumSchema.safeParse(request.query.medium);
       const board = String(request.query.board ?? "");
       if (!medium.success || board.length === 0) {
-        badRequest(response, "Invalid ranking query");
+        badRequest(response, "榜单请求参数无效。");
         return;
       }
       response.json(await sync.getRanking(request.currentUserId ?? null, medium.data, board));
@@ -303,15 +435,66 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     try {
       const scope = timelineScopeSchema.safeParse(request.query.scope ?? "following");
       if (!scope.success) {
-        badRequest(response, "Invalid timeline query", scope.error.flatten());
+        badRequest(response, "动态请求参数无效。", scope.error.flatten());
         return;
       }
       const start = Number(request.query.start ?? 0);
       if (!Number.isInteger(start) || start < 0) {
-        badRequest(response, "Invalid timeline query", { start: "start must be a non-negative integer" });
+        badRequest(response, "动态请求参数无效。", { start: "start 必须是大于等于 0 的整数。" });
         return;
       }
       response.json(await sync.getTimeline(userId, scope.data, start));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/timeline/:statusId/like", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    try {
+      const body = timelineActionTargetSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "动态点赞参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await sync.likeTimelineStatus(userId, routeParam(request.params.statusId), body.data.detailUrl));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/timeline/:statusId/reply", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    try {
+      const body = timelineReplySchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "动态回复参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await sync.replyTimelineStatus(userId, routeParam(request.params.statusId), body.data.detailUrl, body.data.text));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/timeline/:statusId/repost", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    try {
+      const body = timelineRepostSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "动态转发参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await sync.repostTimelineStatus(userId, routeParam(request.params.statusId), body.data.detailUrl, body.data.text));
     } catch (error) {
       next(error);
     }
@@ -326,7 +509,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       const medium = mediumSchema.safeParse(request.params.medium);
       const body = updateLibraryStateSchema.safeParse(request.body);
       if (!medium.success || !body.success) {
-        badRequest(response, "Invalid state update", {
+        badRequest(response, "标记更新参数无效。", {
           medium: medium.success ? null : medium.error.flatten(),
           body: body.success ? null : body.error.flatten()
         });
@@ -342,7 +525,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     try {
       const body = importDoubanSessionSchema.safeParse(request.body);
       if (!body.success) {
-        badRequest(response, "Invalid douban session payload", body.error.flatten());
+        badRequest(response, "Cookie 导入参数无效。", body.error.flatten());
         return;
       }
       const token = createSessionToken();
@@ -376,11 +559,11 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
       try {
         imageUrl = new URL(rawUrl);
       } catch {
-        badRequest(response, "Invalid image URL");
+        badRequest(response, "图片地址无效。");
         return;
       }
       if (!isAllowedImageUrl(imageUrl)) {
-        badRequest(response, "Image host is not allowed");
+        badRequest(response, "图片来源域名不被允许。");
         return;
       }
       const upstream = await fetch(imageUrl, {
@@ -391,7 +574,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         }
       });
       if (!upstream.ok) {
-        response.status(upstream.status).json({ error: `Image request failed: ${upstream.status}` });
+        response.status(upstream.status).json({ error: `图片请求失败：${upstream.status}` });
         return;
       }
       const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
@@ -423,7 +606,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     }
     const job = sync.getSyncJob(userId, routeParam(request.params.jobId));
     if (!job) {
-      response.status(404).json({ error: "Job not found" });
+      response.status(404).json({ error: "同步任务不存在。" });
       return;
     }
     response.json(job);
@@ -440,7 +623,7 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
   serveWebApp(app, config.webDistDir);
 
   app.use((error: unknown, _request: Request, response: Response, _next: unknown) => {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "未知错误。";
     response.status(500).json({ error: message });
   });
 

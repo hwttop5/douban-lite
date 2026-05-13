@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthMeResponse, OverviewResponse } from "../../../../packages/shared/src";
 import * as api from "../api";
@@ -102,6 +103,7 @@ describe("MyPage", () => {
   });
 
   it("shows the login prompt without requesting library data when the user is signed out", async () => {
+    const user = userEvent.setup();
     vi.spyOn(api, "getAuthMe").mockResolvedValue({
       authenticated: false,
       user: null,
@@ -141,18 +143,31 @@ describe("MyPage", () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <AppContextProvider>
-            <MyPage />
-          </AppContextProvider>
+        <MemoryRouter initialEntries={["/me"]}>
+          <Routes>
+            <Route
+              path="/me"
+              element={
+                <AppContextProvider>
+                  <MyPage />
+                </AppContextProvider>
+              }
+            />
+            <Route path="/login" element={<div>登录页占位</div>} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     );
 
-    expect(await screen.findByRole("button", { name: "去设置" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "请登录" })).toBeInTheDocument();
+    const loginButton = screen.getByRole("button", { name: "去登录" });
+    expect(loginButton).toBeInTheDocument();
     expect(screen.queryByText("正在整理资料")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(getLibrarySpy).not.toHaveBeenCalled();
     });
+
+    await user.click(loginButton);
+    expect(await screen.findByText("登录页占位")).toBeInTheDocument();
   });
 });

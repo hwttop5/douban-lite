@@ -40,6 +40,24 @@ export interface ParsedInterestSelection {
   comment: string | null;
 }
 
+export interface ParsedTimelineActionForm {
+  actionUrl: string;
+  method: "POST" | "GET";
+  defaultFields: Record<string, string>;
+  textFieldName: string | null;
+}
+
+export interface ParsedTimelineActionContext {
+  statusId: string;
+  engagements: TimelineEngagement[];
+  userLikeState: TimelineItem["userLikeState"];
+  availableActions: TimelineItem["availableActions"];
+  likeForm: ParsedTimelineActionForm | null;
+  unlikeForm: ParsedTimelineActionForm | null;
+  replyForm: ParsedTimelineActionForm | null;
+  repostForm: ParsedTimelineActionForm | null;
+}
+
 export function ensureNoAccessChallenge(html: string, finalUrl: string) {
   if (
     finalUrl.includes("sec.douban.com") ||
@@ -56,6 +74,14 @@ export function ensureNoAccessChallenge(html: string, finalUrl: string) {
 function safeText(value: string | undefined | null) {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized.length > 0 ? normalized : null;
+}
+
+function extractCollectionComment($: cheerio.CheerioAPI, root?: cheerio.Cheerio<any>) {
+  const scope = root ?? $.root();
+  const selectors = root
+    ? ".collection-comment, .comment, .short-note, .comment-text"
+    : "#interest_sectl .collection-comment, .item-subject-rating .collection-comment, .subject-collection .collection-comment, .collection-comment";
+  return safeText(scope.find(selectors).first().text());
 }
 
 function decodedCandidates(input: string) {
@@ -937,12 +963,14 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
       return;
     }
     seen.add(key);
+    const diggLink = root.find(".digg a, .comment-vote .vote-comment").first();
+    const voteStateText = safeText(root.find(".digg, .comment-vote").first().text()) ?? "";
     comments.push({
       id,
       author: safeText(authorLink.text()),
       authorUrl: absoluteUrl("https://www.douban.com", authorLink.attr("href")),
       authorAvatarUrl: null,
-      userVoteState: /cancel_vote/.test(root.find(".digg a").first().attr("href") ?? "") ? "voted" : "not_voted",
+      userVoteState: /cancel_vote/.test(diggLink.attr("href") ?? "") ? "voted" : diggLink.length > 0 ? "not_voted" : /已投票/.test(voteStateText) ? "voted" : "not_voted",
       content,
       rating:
         safeText(root.find(".rating, .user-stars").first().attr("title") ?? null) ??
@@ -955,29 +983,51 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
   return comments.slice(0, limit);
 }
 
-export function parseSubjectCommentVoteAction(html: string, commentId: string) {
+function extractSubjectCommentVoteApiTemplate(html: string) {
+  return (
+    html.match(/createVoteHandler\(\{[\s\S]*?api:\s*['"]([^'"]+)['"]/i)?.[1] ??
+    html.match(/api:\s*['"]([^'"]*\/j\/comment\/:id\/vote[^'"]*)['"]/i)?.[1] ??
+    null
+  );
+}
+
+export function parseSubjectCommentVoteAction(html: string, commentId: string, pageUrl = "https://www.douban.com") {
   const $ = cheerio.load(html);
   const root = $(`.comment-item[data-cid="${commentId}"], #${commentId}, .review-item[data-cid="${commentId}"]`).first();
   if (root.length === 0) {
     return null;
   }
   const voteLink = root.find(".digg a").first();
-  if (voteLink.length === 0) {
+  const currentVotes = Number(root.find(".vote-count, .votes, .digg span").first().text()) || 0;
+  if (voteLink.length > 0) {
+    const href = absoluteUrl(pageUrl, voteLink.attr("href"));
+    const dataHref = absoluteUrl(pageUrl, voteLink.attr("data-href"));
+    const userVoteState = /cancel_vote/.test(href ?? "") ? "voted" : "not_voted";
+    const voteUrl = userVoteState === "voted" ? dataHref : href;
+    const cancelVoteUrl = userVoteState === "voted" ? href : dataHref;
+    if (!voteUrl) {
+      return null;
+    }
+    return {
+      voteUrl,
+      cancelVoteUrl: cancelVoteUrl ?? null,
+      userVoteState,
+      votes: currentVotes
+    };
+  }
+
+  const legacyVoteLink = root.find(".comment-vote .vote-comment").first();
+  const legacyVoteTemplate = extractSubjectCommentVoteApiTemplate(html);
+  const legacyVoteTarget = absoluteUrl(pageUrl, legacyVoteTemplate?.replace(":id", legacyVoteLink.attr("data-cid") ?? commentId) ?? null);
+  if (!legacyVoteTarget) {
     return null;
   }
-  const href = absoluteUrl("https://www.douban.com", voteLink.attr("href"));
-  const dataHref = absoluteUrl("https://www.douban.com", voteLink.attr("data-href"));
-  const userVoteState = /cancel_vote/.test(href ?? "") ? "voted" : "not_voted";
-  const voteUrl = userVoteState === "voted" ? dataHref : href;
-  const cancelVoteUrl = userVoteState === "voted" ? href : dataHref;
-  if (!voteUrl) {
-    return null;
-  }
+  const userVoteState = legacyVoteLink.length > 0 ? "not_voted" : /已投票/.test(root.find(".comment-vote").first().text()) ? "voted" : "not_voted";
   return {
-    voteUrl,
-    cancelVoteUrl: cancelVoteUrl ?? null,
+    voteUrl: legacyVoteTarget,
+    cancelVoteUrl: null,
     userVoteState,
-    votes: Number(root.find(".vote-count, .votes, .digg span").first().text()) || 0
+    votes: currentVotes
   };
 }
 
@@ -1121,7 +1171,7 @@ export function parseUserCollection(html: string, baseUrl: string, medium: Mediu
     const nextItem = {
       status: fromDoubanStatus(root.attr("data-status") ?? undefined, fallbackStatus),
       rating: ratingFromRoot(root),
-      comment: safeText(root.find(".comment, .short-note, .comment-text").first().text()),
+      comment: extractCollectionComment($, root),
       subject
     };
     const existing = items.get(subject.doubanId);
@@ -1258,8 +1308,11 @@ export function parseInterestSelection(html: string, detailUrl: string): ParsedI
     const form = parseInterestForm(html, detailUrl);
     const rawStatus = form.defaultFields[form.statusFieldName];
     const ratingValue = form.ratingFieldName ? form.defaultFields[form.ratingFieldName] ?? "" : "";
+    const $ = cheerio.load(html);
     const commentValue =
-      Object.entries(form.defaultFields).find(([name]) => /^comment$/i.test(name) || /comment/i.test(name) || /intro/i.test(name))?.[1] ?? "";
+      Object.entries(form.defaultFields).find(([name]) => /^comment$/i.test(name) || /comment/i.test(name) || /intro/i.test(name))?.[1] ??
+      extractCollectionComment($) ??
+      "";
     const numericRating = Number(ratingValue);
     return {
       status: rawStatus ? fromDoubanStatus(rawStatus, "wish") : null,
@@ -1282,13 +1335,239 @@ export function parseInterestSelection(html: string, detailUrl: string): ParsedI
     return {
       status,
       rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null,
-      comment: null
+      comment: extractCollectionComment($)
     };
   }
 }
 
 export function parsePeopleId(html: string) {
   return html.match(/people\/([^/"'?]+)\//)?.[1] ?? null;
+}
+
+function parseTimelineActionKind(input: string) {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (/(cancel[_-]?like|unlike|liked|取消赞|已赞|收回赞|撤销赞)/i.test(normalized)) {
+    return "unlike" as const;
+  }
+  if (/(?:^|[^a-z])(reply|comment)(?:[^a-z]|$)|回应|回复/i.test(normalized)) {
+    return "reply" as const;
+  }
+  if (/(?:^|[^a-z])(repost|retweet|reshare|share)(?:[^a-z]|$)|转发/i.test(normalized)) {
+    return "repost" as const;
+  }
+  if (/(?:^|[^a-z])like(?:[^a-z]|$)|赞/i.test(normalized)) {
+    return "like" as const;
+  }
+  return null;
+}
+
+function parseTimelineActionLikeState($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>): TimelineItem["userLikeState"] {
+  let state: TimelineItem["userLikeState"] = "unknown";
+  root.find("form, a, button, [data-href], [data-action]").each((_, element) => {
+    if (state === "liked") {
+      return;
+    }
+    const current = $(element);
+    const text = safeText(current.text()) ?? "";
+    const href = current.attr("href") ?? "";
+    const dataHref = current.attr("data-href") ?? "";
+    const className = current.attr("class") ?? "";
+    const action = `${text} ${href} ${dataHref} ${className} ${current.attr("data-action") ?? ""}`;
+    const kind = parseTimelineActionKind(action);
+    if (kind === "unlike") {
+      state = "liked";
+      return;
+    }
+    if (kind === "like" && state === "unknown") {
+      state = "not_liked";
+    }
+  });
+  return state;
+}
+
+function parseTimelineAvailableActions($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>) {
+  const available = {
+    like: false,
+    reply: false,
+    repost: false
+  };
+  root.find("form, a, button, [data-href], [data-action]").each((_, element) => {
+    const current = $(element);
+    const action = [
+      safeText(current.text()),
+      current.attr("href"),
+      current.attr("data-href"),
+      current.attr("class"),
+      current.attr("data-action"),
+      current.attr("aria-label")
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const kind = parseTimelineActionKind(action);
+    if (kind === "like" || kind === "unlike") {
+      available.like = true;
+    } else if (kind === "reply") {
+      available.reply = true;
+    } else if (kind === "repost") {
+      available.repost = true;
+    }
+  });
+  return available;
+}
+
+function parseTimelineForm($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>, baseUrl: string): ParsedTimelineActionForm | null {
+  if (root.length === 0 || root[0]?.tagName !== "form") {
+    return null;
+  }
+  const defaultFields: Record<string, string> = {};
+  let textFieldName: string | null = null;
+  root.find("input, textarea, select").each((_, element) => {
+    const current = $(element);
+    const name = current.attr("name");
+    if (!name) {
+      return;
+    }
+    const tagName = element.tagName?.toLowerCase() ?? "";
+    const type = (current.attr("type") ?? "").toLowerCase();
+    if (tagName === "textarea") {
+      defaultFields[name] = current.text() ?? "";
+      textFieldName ??= name;
+      return;
+    }
+    if (tagName === "select") {
+      const selected = current.find("option[selected]").first();
+      defaultFields[name] = selected.attr("value") ?? selected.text() ?? "";
+      return;
+    }
+    if (type === "checkbox" || type === "radio") {
+      if (current.is(":checked") || current.attr("checked") != null) {
+        defaultFields[name] = current.attr("value") ?? "on";
+      }
+      return;
+    }
+    defaultFields[name] = current.attr("value") ?? "";
+  });
+  return {
+    actionUrl: new URL(root.attr("action") ?? baseUrl, baseUrl).toString(),
+    method: (root.attr("method")?.toUpperCase() === "GET" ? "GET" : "POST") as "GET" | "POST",
+    defaultFields,
+    textFieldName
+  };
+}
+
+function parseTimelineActionLink(root: cheerio.Cheerio<any>, baseUrl: string): ParsedTimelineActionForm | null {
+  if (root.length === 0) {
+    return null;
+  }
+  const href = root.attr("data-href") ?? root.attr("href");
+  if (!href) {
+    return null;
+  }
+  const actionUrl = absoluteUrl(baseUrl, href);
+  if (!actionUrl) {
+    return null;
+  }
+  const defaultFields: Record<string, string> = {};
+  const params = new URL(actionUrl).searchParams;
+  params.forEach((value, key) => {
+    defaultFields[key] = value;
+  });
+  for (const attribute of ["data-sid", "data-id", "data-status-id"]) {
+    const value = root.attr(attribute);
+    if (!value) {
+      continue;
+    }
+    const key = attribute.replace(/^data-/, "").replace(/-/g, "_");
+    defaultFields[key] = value;
+  }
+  return {
+    actionUrl,
+    method: (root.attr("data-method")?.toUpperCase() === "GET" ? "GET" : "POST") as "GET" | "POST",
+    defaultFields,
+    textFieldName: null
+  };
+}
+
+function parseTimelineActionFormByKind(
+  $: cheerio.CheerioAPI,
+  root: cheerio.Cheerio<any>,
+  baseUrl: string,
+  matcher: (kind: ReturnType<typeof parseTimelineActionKind>) => boolean
+) {
+  let fallback: ParsedTimelineActionForm | null = null;
+  root.find("form").each((_, element) => {
+    const current = $(element);
+    const hint = [
+      current.attr("action"),
+      current.attr("class"),
+      current.attr("id"),
+      current.attr("data-action"),
+      safeText(current.text())
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const kind = parseTimelineActionKind(hint);
+    if (!matcher(kind)) {
+      return;
+    }
+    fallback = parseTimelineForm($, current, baseUrl);
+    return false;
+  });
+  if (fallback) {
+    return fallback;
+  }
+  root.find("a[href], [data-href]").each((_, element) => {
+    const current = $(element);
+    const hint = [
+      current.attr("href"),
+      current.attr("data-href"),
+      current.attr("class"),
+      current.attr("data-action"),
+      safeText(current.text()),
+      current.attr("aria-label")
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const kind = parseTimelineActionKind(hint);
+    if (!matcher(kind)) {
+      return;
+    }
+    fallback = parseTimelineActionLink(current, baseUrl);
+    return false;
+  });
+  return fallback;
+}
+
+export function parseTimelineActionContext(html: string, baseUrl: string, statusId: string): ParsedTimelineActionContext | null {
+  const $ = cheerio.load(html);
+  const wrapper =
+    $(`.new-status.status-wrapper[data-sid="${statusId}"]`).first().length > 0
+      ? $(`.new-status.status-wrapper[data-sid="${statusId}"]`).first()
+      : $(`.status-item[data-sid="${statusId}"]`).first().length > 0
+        ? $(`.status-item[data-sid="${statusId}"]`).first()
+        : $(".new-status.status-wrapper, .status-item, .status-real-wrapper, .status").first();
+  if (wrapper.length === 0) {
+    return null;
+  }
+  const actionRoot =
+    wrapper.find(".timeline-actions, .status-actions, .actions, .operations, .operation-div, .action-bar, .status-op").first().length > 0
+      ? wrapper.find(".timeline-actions, .status-actions, .actions, .operations, .operation-div, .action-bar, .status-op").first()
+      : wrapper;
+  const engagementsSource = timelineText(actionRoot).length > 0 ? timelineText(actionRoot) : timelineText(wrapper);
+  const availableActions = parseTimelineAvailableActions($, actionRoot);
+  return {
+    statusId,
+    engagements: parseEngagements(engagementsSource),
+    userLikeState: parseTimelineActionLikeState($, actionRoot),
+    availableActions,
+    likeForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "like"),
+    unlikeForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "unlike"),
+    replyForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "reply"),
+    repostForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "repost")
+  };
 }
 
 function splitTimelineTailMeta(text: string) {
@@ -1467,6 +1746,19 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
     const authorAvatarUrl = authorImage.attr("src") ? new URL(authorImage.attr("src")!, baseUrl).toString() : null;
     const subjectCoverUrl = hasSubject && subjectImage?.attr("src") ? new URL(subjectImage.attr("src")!, baseUrl).toString() : null;
     const photoUrls = parseTimelinePhotos($, wrapper, baseUrl, [authorAvatarUrl ?? "", subjectCoverUrl ?? ""]);
+    const detailUrl = absoluteUrl(baseUrl, detailLink.attr("href"));
+    const parsedAvailableActions = parseTimelineAvailableActions($, wrapper);
+    const defaultAvailableActions = detailUrl
+      ? {
+          like: true,
+          reply: true,
+          repost: true
+        }
+      : {
+          like: false,
+          reply: false,
+          repost: false
+        };
 
     items.push({
       id,
@@ -1476,12 +1768,18 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
       actionText,
       content: cleanTimelineContent(fullText, [authorName, subjectTitle, createdAtText, actionText]) || null,
       createdAtText,
-      detailUrl: absoluteUrl(baseUrl, detailLink.attr("href")),
+      detailUrl,
       subjectTitle,
       subjectUrl,
       subjectCoverUrl,
       photoUrls,
-      engagements: parseEngagements(fullText)
+      engagements: parseEngagements(fullText),
+      userLikeState: parseTimelineActionLikeState($, wrapper),
+      availableActions: {
+        like: parsedAvailableActions.like || defaultAvailableActions.like,
+        reply: parsedAvailableActions.reply || defaultAvailableActions.reply,
+        repost: parsedAvailableActions.repost || defaultAvailableActions.repost
+      }
     });
   });
 

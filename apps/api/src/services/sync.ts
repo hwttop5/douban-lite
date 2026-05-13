@@ -13,6 +13,7 @@ import type {
   SubjectDetailResponse,
   SyncJobRecord,
   SyncJobType,
+  TimelineActionResponse,
   TimelineResponse,
   TimelineScope,
   UpdateLibraryStateInput
@@ -246,6 +247,21 @@ export class SyncService {
   async voteSubjectComment(userId: string, medium: Medium, doubanId: string, commentId: string): Promise<SubjectCommentVoteResponse> {
     const session = this.requireDoubanSession(userId);
     return this.client.voteSubjectComment(medium, doubanId, commentId, session.cookie);
+  }
+
+  async likeTimelineStatus(userId: string, statusId: string, detailUrl: string): Promise<TimelineActionResponse> {
+    const session = this.requireDoubanSession(userId);
+    return this.client.likeTimelineStatus(statusId, detailUrl, session.cookie);
+  }
+
+  async replyTimelineStatus(userId: string, statusId: string, detailUrl: string, text: string): Promise<TimelineActionResponse> {
+    const session = this.requireDoubanSession(userId);
+    return this.client.replyTimelineStatus(statusId, detailUrl, text, session.cookie);
+  }
+
+  async repostTimelineStatus(userId: string, statusId: string, detailUrl: string, text?: string): Promise<TimelineActionResponse> {
+    const session = this.requireDoubanSession(userId);
+    return this.client.repostTimelineStatus(statusId, detailUrl, text, session.cookie);
   }
 
   private async enrichRelatedSubjects(subjects: SubjectDetailResponse["relatedSubjects"], cookie?: string) {

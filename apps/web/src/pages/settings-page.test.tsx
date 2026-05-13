@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthMeResponse } from "../../../../packages/shared/src";
@@ -7,8 +7,71 @@ import * as api from "../api";
 import { AppContextProvider } from "../app-context";
 import { SettingsPage } from "./settings-page";
 
+function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"]): AuthMeResponse {
+  if (status === "valid") {
+    return {
+      authenticated: true,
+      user: {
+        id: "user-1",
+        peopleId: "demo-user",
+        displayName: "Demo",
+        avatarUrl: null,
+        ipLocation: "Shanghai",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      sessionStatus: {
+        status,
+        peopleId: "demo-user",
+        displayName: "Demo",
+        avatarUrl: null,
+        ipLocation: "Shanghai",
+        lastCheckedAt: null,
+        lastError: null
+      }
+    };
+  }
+
+  return {
+    authenticated: false,
+    user: null,
+    sessionStatus: {
+      status,
+      peopleId: status === "invalid" ? "demo-user" : null,
+      displayName: status === "invalid" ? "Demo" : null,
+      avatarUrl: null,
+      ipLocation: "Shanghai",
+      lastCheckedAt: null,
+      lastError: status === "invalid" ? "需要重新登录" : null
+    }
+  };
+}
+
 function renderSettingsPage(authMe: AuthMeResponse) {
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
+  vi.spyOn(api, "logoutDoubanSession").mockResolvedValue({
+    status: "missing"
+  });
+  vi.spyOn(api, "triggerManualSync").mockResolvedValue({
+    id: "job-1",
+    userId: "user-1",
+    type: "manual_pull",
+    status: "completed",
+    payload: {},
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    errorMessage: null
+  });
+  vi.spyOn(api, "getSyncJob").mockResolvedValue({
+    id: "job-1",
+    userId: "user-1",
+    type: "manual_pull",
+    status: "completed",
+    payload: {},
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    errorMessage: null
+  });
 
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -28,75 +91,34 @@ afterEach(() => {
 });
 
 describe("SettingsPage", () => {
-  it("shows the full cookie login guide when the session is missing", async () => {
-    renderSettingsPage({
-      authenticated: false,
-      user: null,
-      sessionStatus: {
-        status: "missing",
-        peopleId: null,
-        displayName: null,
-        avatarUrl: null,
-        ipLocation: null,
-        lastCheckedAt: null,
-        lastError: null
-      }
-    });
-
-    expect(await screen.findByText("如何获取 Cookie 并在 PWA 中登录")).toBeInTheDocument();
-    expect(screen.getByText("获取 Cookie")).toBeInTheDocument();
-    expect(screen.getByText("在 PWA 中登录")).toBeInTheDocument();
-    expect(screen.getByText("Cookie 失效后重新登录")).toBeInTheDocument();
-    expect(screen.getByText("安全提示")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cookie")).toBeInTheDocument();
-  });
-
-  it("hides the full guide and shows a concise hint when the session is valid", async () => {
-    renderSettingsPage({
-      authenticated: true,
-      user: {
-        id: "user-1",
-        peopleId: "demo-user",
-        displayName: "Demo",
-        avatarUrl: null,
-        ipLocation: "Shanghai",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      sessionStatus: {
-        status: "valid",
-        peopleId: "demo-user",
-        displayName: "Demo",
-        avatarUrl: null,
-        ipLocation: "Shanghai",
-        lastCheckedAt: null,
-        lastError: null
-      }
-    });
+  it("renders only session, menu, and sync panels without any login forms", async () => {
+    renderSettingsPage(createAuthMeResponse("missing"));
 
     expect(await screen.findByText("豆瓣会话状态")).toBeInTheDocument();
-    expect(screen.queryByText("如何获取 Cookie 并在 PWA 中登录")).not.toBeInTheDocument();
-    expect(screen.getByText("如豆瓣会话失效，重新复制最新 Cookie 并再次导入即可。")).toBeInTheDocument();
+    expect(screen.getByText("菜单显示")).toBeInTheDocument();
+    expect(screen.getByText("同步任务")).toBeInTheDocument();
+    expect(screen.getByText("当前没有可用豆瓣会话，请前往登录页完成登录后再同步个人数据。")).toBeInTheDocument();
+
+    expect(screen.queryByText("代理豆瓣登录")).not.toBeInTheDocument();
+    expect(screen.queryByText("如何获取 Cookie 并在 PWA 里登录")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "短信验证登录" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Cookie")).not.toBeInTheDocument();
   });
 
-  it("shows the full guide again when the session is invalid", async () => {
-    renderSettingsPage({
-      authenticated: false,
-      user: null,
-      sessionStatus: {
-        status: "invalid",
-        peopleId: "demo-user",
-        displayName: "Demo",
-        avatarUrl: null,
-        ipLocation: "Shanghai",
-        lastCheckedAt: null,
-        lastError: "需要重新登录"
-      }
-    });
+  it("keeps current account and logout controls when the session is valid", async () => {
+    renderSettingsPage(createAuthMeResponse("valid"));
 
-    expect(await screen.findByText("如何获取 Cookie 并在 PWA 中登录")).toBeInTheDocument();
-    expect(screen.getByText("当前没有可用会话，或会话已失效。")).toBeInTheDocument();
-    expect(screen.getByText("需要重新登录")).toBeInTheDocument();
+    expect(await screen.findByText("当前账号：Demo")).toBeInTheDocument();
+    expect(screen.queryByText("如需切换账号或刷新会话，请前往登录页。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "立即同步" })).toBeEnabled();
+  });
+
+  it("shows the sync gate but keeps the rest of settings available when the session is invalid", async () => {
+    renderSettingsPage(createAuthMeResponse("invalid"));
+
+    expect(await screen.findByText("需要重新登录")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请先登录" })).toBeDisabled();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
   });
 });

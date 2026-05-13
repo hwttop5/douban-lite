@@ -1,8 +1,18 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { getAuthMe, getTimeline, proxiedImageUrl } from "../api";
-import { LoadingInline, TimelineSkeletonList } from "../components/loading-state";
+import type { TimelineActionResponse, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
+import { getAuthMe, getTimeline, likeTimelineStatus, proxiedImageUrl, replyTimelineStatus, repostTimelineStatus } from "../api";
+import { LoadingButtonLabel, LoadingInline, TimelineSkeletonList } from "../components/loading-state";
 import { useAutoLoadMore } from "../hooks/use-auto-load-more";
+
+interface TimelineDialogState {
+  item: TimelineItem;
+  mode: "reply" | "repost";
+  text: string;
+}
+
+type TimelineEngagementLabel = TimelineItem["engagements"][number]["label"];
 
 function subjectRouteFromUrl(url: string | null) {
   if (!url) {
@@ -50,28 +60,62 @@ function renderStars(rating: number | null) {
   );
 }
 
-function renderEngagements(engagements: Array<{ label: "回应" | "转发" | "赞"; count: number | null }>) {
-  if (engagements.length === 0) {
-    return null;
+function timelineCount(engagements: TimelineItem["engagements"], label: TimelineEngagementLabel) {
+  return engagements.find((item) => item.label === label)?.count ?? 0;
+}
+
+function updateTimelinePages(current: InfiniteData<TimelineResponse, number> | undefined, result: TimelineActionResponse) {
+  if (!current) {
+    return current;
   }
-  const counts = new Map(engagements.map((item) => [item.label, item.count]));
-  const orderedLabels: Array<{ key: "赞" | "回应" | "转发"; text: string }> = [
-    { key: "赞", text: "赞" },
-    { key: "回应", text: "回复" },
-    { key: "转发", text: "转发" }
-  ];
+  return {
+    ...current,
+    pages: current.pages.map((page) => ({
+      ...page,
+      items: page.items.map((item) =>
+        item.id === result.statusId
+          ? {
+              ...item,
+              engagements: result.engagements,
+              userLikeState: result.userLikeState ?? item.userLikeState
+            }
+          : item
+      )
+    }))
+  };
+}
+
+function applyTimelineActionResult(queryClient: ReturnType<typeof useQueryClient>, result: TimelineActionResponse) {
+  queryClient.setQueriesData({ queryKey: ["timeline"] }, (current: InfiniteData<TimelineResponse, number> | undefined) =>
+    updateTimelinePages(current, result)
+  );
+}
+
+function TimelineActionButton({
+  label,
+  count,
+  active,
+  disabled,
+  onClick
+}: {
+  label: string;
+  count: number;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const text = `${label} (${count})`;
   return (
-    <p className="timeline-card__engagements">
-      {orderedLabels.map(({ key, text }) => (
-        <span key={key}>
-          {text} ({counts.get(key) ?? 0})
-        </span>
-      ))}
-    </p>
+    <button type="button" className={active ? "is-active" : ""} disabled={disabled} onClick={onClick} aria-label={text}>
+      {text}
+    </button>
   );
 }
 
 export function TimelinePage() {
+  const queryClient = useQueryClient();
+  const [dialog, setDialog] = useState<TimelineDialogState | null>(null);
+
   const authQuery = useQuery({
     queryKey: ["auth-me"],
     queryFn: getAuthMe,
@@ -88,6 +132,34 @@ export function TimelinePage() {
     retry: 1
   });
 
+  const likeMutation = useMutation({
+    mutationFn: (item: TimelineItem) => {
+      if (!item.detailUrl) {
+        throw new Error("该动态缺少详情地址，暂时不能操作。");
+      }
+      return likeTimelineStatus(item.id, item.detailUrl);
+    },
+    onSuccess: (result) => {
+      applyTimelineActionResult(queryClient, result);
+    }
+  });
+
+  const submitActionMutation = useMutation({
+    mutationFn: (state: TimelineDialogState) => {
+      if (!state.item.detailUrl) {
+        throw new Error("该动态缺少详情地址，暂时不能操作。");
+      }
+      if (state.mode === "reply") {
+        return replyTimelineStatus(state.item.id, state.item.detailUrl, state.text.trim());
+      }
+      return repostTimelineStatus(state.item.id, state.item.detailUrl, state.text.trim() || undefined);
+    },
+    onSuccess: (result) => {
+      applyTimelineActionResult(queryClient, result);
+      setDialog(null);
+    }
+  });
+
   const firstPage = timelineQuery.data?.pages[0];
   const items = timelineQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const showTimelineSkeleton = timelineQuery.isFetching && items.length === 0;
@@ -100,6 +172,16 @@ export function TimelinePage() {
       void timelineQuery.fetchNextPage();
     }
   });
+
+  const submitDialog = () => {
+    if (!dialog) {
+      return;
+    }
+    if (dialog.mode === "reply" && dialog.text.trim().length === 0) {
+      return;
+    }
+    submitActionMutation.mutate(dialog);
+  };
 
   return (
     <div className="page timeline-page">
@@ -133,6 +215,13 @@ export function TimelinePage() {
           const subjectRoute = subjectRouteFromUrl(item.subjectUrl);
           const hasLinkedSubject = Boolean(item.subjectTitle || item.subjectUrl);
           const hasPhotoPost = !hasLinkedSubject && photoUrls.length > 0;
+          const likeCount = timelineCount(item.engagements, "赞");
+          const replyCount = timelineCount(item.engagements, "回应");
+          const repostCount = timelineCount(item.engagements, "转发");
+          const availableActions = item.availableActions ?? { like: false, reply: false, repost: false };
+          const userLikeState = item.userLikeState ?? "unknown";
+          const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
+          const dialogPending = submitActionMutation.isPending && submitActionMutation.variables?.item.id === item.id;
           const subjectContent = (
             <>
               {subjectCoverUrl ? <img src={subjectCoverUrl} alt="" /> : <span className="timeline-subject__placeholder">条目</span>}
@@ -188,7 +277,33 @@ export function TimelinePage() {
                   )
                 ) : null}
 
-                {renderEngagements(item.engagements)}
+                <p className="timeline-card__engagements">
+                  <span>
+                    <TimelineActionButton
+                      label="赞"
+                      count={likeCount}
+                      active={userLikeState === "liked"}
+                      disabled={!availableActions.like || !item.detailUrl || likePending || dialogPending}
+                      onClick={() => likeMutation.mutate(item)}
+                    />
+                  </span>
+                  <span>
+                    <TimelineActionButton
+                      label="回复"
+                      count={replyCount}
+                      disabled={!availableActions.reply || !item.detailUrl || likePending || dialogPending}
+                      onClick={() => setDialog({ item, mode: "reply", text: "" })}
+                    />
+                  </span>
+                  <span>
+                    <TimelineActionButton
+                      label="转发"
+                      count={repostCount}
+                      disabled={!availableActions.repost || !item.detailUrl || likePending || dialogPending}
+                      onClick={() => setDialog({ item, mode: "repost", text: "" })}
+                    />
+                  </span>
+                </p>
               </div>
             </article>
           );
@@ -196,9 +311,44 @@ export function TimelinePage() {
         {!showTimelineSkeleton && !timelineQuery.isFetching && items.length === 0 ? <p className="empty-state">暂时没有解析到动态内容。</p> : null}
       </div>
 
+      {likeMutation.error ? <p className="form-error">{likeMutation.error.message}</p> : null}
+      {submitActionMutation.error ? <p className="form-error">{submitActionMutation.error.message}</p> : null}
       {timelineQuery.hasNextPage ? <div ref={autoLoadMoreRef} className="auto-load-sentinel" aria-hidden="true" /> : null}
       {showTimelineRefreshHint ? <p className="auto-load-status"><LoadingInline label="正在展开更多动态" tone="soft" /></p> : null}
       {!timelineQuery.hasNextPage && !timelineQuery.isFetching && items.length > 0 ? <p className="empty-state">没有更多动态了。</p> : null}
+
+      {dialog ? (
+        <div className="timeline-action-dialog" role="dialog" aria-modal="true" aria-labelledby="timeline-action-dialog-title">
+          <div className="timeline-action-dialog__scrim" onClick={() => (submitActionMutation.isPending ? null : setDialog(null))} />
+          <section className="timeline-action-dialog__panel">
+            <header className="timeline-action-dialog__header">
+              <button type="button" onClick={() => setDialog(null)} disabled={submitActionMutation.isPending}>
+                取消
+              </button>
+              <h2 id="timeline-action-dialog-title">{dialog.mode === "reply" ? "回复动态" : "转发动态"}</h2>
+              <button
+                type="button"
+                onClick={submitDialog}
+                disabled={submitActionMutation.isPending || (dialog.mode === "reply" && dialog.text.trim().length === 0)}
+              >
+                {submitActionMutation.isPending ? <LoadingButtonLabel label="提交中" /> : "发送"}
+              </button>
+            </header>
+            <div className="timeline-action-dialog__body">
+              <p className="timeline-action-dialog__hint">{dialog.item.subjectTitle ?? dialog.item.content ?? "写点什么吧"}</p>
+              <label className="timeline-action-dialog__input">
+                <span>{dialog.mode === "reply" ? "回复内容" : "转发附言"}</span>
+                <textarea
+                  autoFocus
+                  placeholder={dialog.mode === "reply" ? "写下你的回复" : "给这条动态补一句话（可选）"}
+                  value={dialog.text}
+                  onChange={(event) => setDialog((current) => (current ? { ...current, text: event.target.value.slice(0, 1000) } : current))}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

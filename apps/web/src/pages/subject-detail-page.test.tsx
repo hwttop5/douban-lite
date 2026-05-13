@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthMeResponse, Medium, SubjectDetailResponse, SubjectRecord } from "../../../../packages/shared/src";
 import * as api from "../api";
@@ -52,6 +52,11 @@ function buildDetailResponse(medium: Medium, doubanId: string, title: string, ov
     sectionLinks: [],
     ...overrides
   };
+}
+
+function LoginRouteEcho() {
+  const location = useLocation();
+  return <div>{`${location.pathname}${location.search}`}</div>;
 }
 
 function renderSubjectDetailPage(
@@ -151,11 +156,13 @@ describe("SubjectDetailPage", () => {
 
     expect(await screen.findByText("Director One")).toBeInTheDocument();
     expect(screen.getByText("Director")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "职员表" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "视频 / 图片" })).toBeInTheDocument();
     expect(screen.getByText("Official Trailer")).toBeInTheDocument();
     expect(screen.getByText("Still One")).toBeInTheDocument();
     expect(screen.queryByText("全部视频")).not.toBeInTheDocument();
     expect(screen.queryByText("全部图片")).not.toBeInTheDocument();
+    expect(screen.queryByText("查看全部")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢这部电影的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Forrest Gump")).toBeInTheDocument();
   });
@@ -176,6 +183,53 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Track Two")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "喜欢听此专辑的人也喜欢" })).toBeInTheDocument();
     expect(screen.getByText("Related Album")).toBeInTheDocument();
+  });
+
+  it("prefers the user's comment over status text when a music comment exists", async () => {
+    renderSubjectDetailPage(
+      "music",
+      "1394576",
+      buildDetailResponse("music", "1394576", "Sea Change", {
+        userItem: {
+          medium: "music",
+          doubanId: "1394576",
+          status: "wish",
+          rating: null,
+          comment: "Only this comment",
+          tags: [],
+          syncToTimeline: true,
+          syncState: "synced",
+          errorMessage: null,
+          updatedAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          lastPushedAt: new Date().toISOString()
+        }
+      }),
+      {
+        authenticated: true,
+        user: {
+          id: "user-1",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        sessionStatus: {
+          status: "valid",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          ipLocation: null,
+          lastCheckedAt: new Date().toISOString(),
+          lastError: null
+        }
+      }
+    );
+
+    expect(await screen.findByText("Only this comment")).toBeInTheDocument();
+    expect(document.querySelector(".detail-my-rating__summary strong")?.textContent).toBe("Only this comment");
+    expect(document.querySelector(".detail-my-rating__summary span")).toBeNull();
   });
 
   it("renders book table of contents and related books", async () => {
@@ -235,7 +289,54 @@ describe("SubjectDetailPage", () => {
     expect(screen.getByText("Related Game")).toBeInTheDocument();
   });
 
-  it("renders user summary, richer comments, and load-more actions", async () => {
+  it("routes the unauthenticated detail CTA to /login with a returnTo query", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "getAuthMe").mockResolvedValue({
+      authenticated: false,
+      user: null,
+      sessionStatus: {
+        status: "missing",
+        peopleId: null,
+        displayName: null,
+        avatarUrl: null,
+        ipLocation: null,
+        lastCheckedAt: null,
+        lastError: null
+      }
+    } satisfies AuthMeResponse);
+    vi.spyOn(api, "getSubjectDetail").mockResolvedValue(buildDetailResponse("movie", "37116612", "Movie Demo"));
+    vi.spyOn(api, "getSubjectComments").mockResolvedValue({
+      items: [],
+      start: 0,
+      nextStart: null,
+      hasMore: false
+    });
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              queries: { retry: false },
+              mutations: { retry: false }
+            }
+          })
+        }
+      >
+        <MemoryRouter initialEntries={["/subject/movie/37116612"]}>
+          <Routes>
+            <Route path="/subject/:medium/:doubanId" element={<SubjectDetailPage />} />
+            <Route path="/login" element={<LoginRouteEcho />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole("button", { name: "去登录" }));
+    expect(await screen.findByText("/login?returnTo=%2Fsubject%2Fmovie%2F37116612")).toBeInTheDocument();
+  });
+
+  it("renders user summary, richer comments, image preview, and load-more actions", async () => {
     const user = userEvent.setup();
     renderSubjectDetailPage(
       "game",
@@ -246,7 +347,7 @@ describe("SubjectDetailPage", () => {
           doubanId: "21355730",
           status: "done",
           rating: 4,
-          comment: "二周目补完了石之心。",
+          comment: "这次主要看系统设计。",
           tags: ["开放世界", "任务设计"],
           syncToTimeline: true,
           syncState: "synced",
@@ -289,6 +390,7 @@ describe("SubjectDetailPage", () => {
             类型: "游戏 / 角色扮演",
             平台: "PC / PS5",
             开发商: "CD Projekt RED",
+            发行商: "Aspyr Media, Inc. / 2K Games",
             发行日期: "2015-05-19"
           }
         }))
@@ -315,7 +417,9 @@ describe("SubjectDetailPage", () => {
       }
     );
 
-    expect(await screen.findByText("玩过 · 4 星")).toBeInTheDocument();
+    expect(await screen.findByText("这次主要看系统设计。")).toBeInTheDocument();
+    expect(screen.queryByText("玩过 · 4 星 · 开放世界 · 任务设计")).not.toBeInTheDocument();
+    expect(screen.queryByText("我的短评")).not.toBeInTheDocument();
     expect(screen.getByText("Commenter")).toBeInTheDocument();
     expect(screen.getByText("PC")).toBeInTheDocument();
     expect(screen.getByText("2026-05-13")).toBeInTheDocument();
@@ -330,7 +434,101 @@ describe("SubjectDetailPage", () => {
 
     expect(screen.getByText("Image 4")).toBeInTheDocument();
     expect(screen.getByText("Related 5")).toBeInTheDocument();
-    expect(screen.getAllByText("CD Projekt RED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CD Projekt RED · Aspyr Media, Inc. / 2K Games · 2015-05-19").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByText("Image 1").closest("button")!);
+    expect(screen.getByRole("dialog", { name: "Image 1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog", { name: "Image 1" })).not.toBeInTheDocument();
+  });
+
+  it("shows load-more controls for movie staff and media", async () => {
+    const user = userEvent.setup();
+    renderSubjectDetailPage(
+      "movie",
+      "26637615",
+      buildDetailResponse("movie", "26637615", "Movie Demo", {
+        staff: Array.from({ length: 6 }, (_, index) => ({
+          name: `Staff ${index + 1}`,
+          role: index < 2 ? "导演" : "演员",
+          avatarUrl: `https://img.example.test/staff-${index + 1}.jpg`,
+          profileUrl: `https://movie.douban.com/celebrity/${index + 1}/`
+        })),
+        media: {
+          videos: Array.from({ length: 2 }, (_, index) => ({
+            type: "video" as const,
+            title: `Trailer ${index + 1}`,
+            thumbnailUrl: `https://img.example.test/trailer-${index + 1}.jpg`,
+            url: `https://movie.douban.com/trailer/${index + 1}/`
+          })),
+          images: Array.from({ length: 2 }, (_, index) => ({
+            type: "image" as const,
+            title: `Still ${index + 1}`,
+            thumbnailUrl: `https://img.example.test/still-${index + 1}.jpg`,
+            url: `https://movie.douban.com/photos/photo/${index + 1}/`
+          }))
+        }
+      })
+    );
+
+    expect(await screen.findByText("Staff 1")).toBeInTheDocument();
+    expect(screen.queryByText("Staff 5")).not.toBeInTheDocument();
+    expect(screen.queryByText("Still 1")).not.toBeInTheDocument();
+
+    const moreButtons = screen.getAllByRole("button", { name: "查看更多" });
+    await user.click(moreButtons[0]!);
+    await user.click(moreButtons[1]!);
+
+    expect(screen.getByText("Staff 5")).toBeInTheDocument();
+    expect(screen.getByText("Still 1")).toBeInTheDocument();
+  });
+
+  it("uses muted hint styling for metadata-like comments and updated empty copy", async () => {
+    renderSubjectDetailPage(
+      "book",
+      "6082808",
+      buildDetailResponse("book", "6082808", "Book Demo", {
+        userItem: {
+          medium: "book",
+          doubanId: "6082808",
+          status: "done",
+          rating: null,
+          comment: "2026-05-10 读过 修改 删除",
+          tags: [],
+          syncToTimeline: true,
+          syncState: "synced",
+          errorMessage: null,
+          updatedAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          lastPushedAt: new Date().toISOString()
+        },
+        comments: []
+      }),
+      {
+        authenticated: true,
+        user: {
+          id: "user-1",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        sessionStatus: {
+          status: "valid",
+          peopleId: "demo-user",
+          displayName: "Demo User",
+          avatarUrl: null,
+          ipLocation: null,
+          lastCheckedAt: new Date().toISOString(),
+          lastError: null
+        }
+      }
+    );
+
+    expect(await screen.findByText("暂无公开短评。")).toBeInTheDocument();
+    expect(document.querySelector(".detail-my-rating__comment--hint")).not.toBeNull();
+    expect(screen.queryByText("我的短评")).not.toBeInTheDocument();
   });
 
   it("votes on a comment and updates the visible count", async () => {

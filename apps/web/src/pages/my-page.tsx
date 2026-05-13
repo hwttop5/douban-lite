@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { ShelfStatus } from "../../../../packages/shared/src";
 import { mediumLabels, shelfStatuses, statusLabels } from "../../../../packages/shared/src";
 import { getAuthMe, getLibrary, getOverview, proxiedImageUrl } from "../api";
 import { useAppContext } from "../app-context";
 import { LoadingInline, PanelLoading, SubjectCardSkeletonGrid } from "../components/loading-state";
+import { buildLoginPath, getRelativeLocation } from "../login-routing";
 import { SegmentedControl } from "../components/segmented-control";
 import { SubjectCard } from "../components/subject-card";
 
 export function MyPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { medium } = useAppContext();
   const [status, setStatus] = useState<ShelfStatus>("wish");
 
@@ -44,6 +46,7 @@ export function MyPage() {
     .reduce((sum, item) => sum + item.count, 0);
   const showLibrarySkeleton = hasSession && libraryQuery.isFetching && !libraryQuery.data;
   const showLibraryRefreshHint = hasSession && libraryQuery.isFetching && Boolean(libraryQuery.data);
+  const loginPath = buildLoginPath(getRelativeLocation(location));
 
   if ((authQuery.isPending && !authQuery.data) || (hasSession && overviewQuery.isPending && !overviewQuery.data)) {
     return (
@@ -65,7 +68,7 @@ export function MyPage() {
       <section className="profile-layout">
         <div className={hasSession ? "profile-hero profile-hero--logged-in" : "profile-hero profile-hero--logged-out"}>
           <div className="profile-hero__backdrop" />
-          <button className="profile-hero__settings" type="button" onClick={() => navigate("/settings")}>
+          <button className="profile-hero__settings" type="button" onClick={() => navigate(hasSession ? "/settings" : loginPath)}>
             {hasSession ? "偏好设置" : "请登录"}
           </button>
           {hasSession ? (
@@ -129,7 +132,7 @@ export function MyPage() {
             <section className="panel login-required-panel">
               <strong>请先登录豆瓣</strong>
               <p className="supporting">导入 Cookie 后才能查看你的个人评分和标记</p>
-              <button className="primary-button" type="button" onClick={() => navigate("/settings")}>去设置</button>
+              <button className="primary-button" type="button" onClick={() => navigate(loginPath)}>去登录</button>
             </section>
           )}
         </div>

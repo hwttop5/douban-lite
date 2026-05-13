@@ -9,9 +9,11 @@ import {
   parseInterestSelection,
   parseRanking,
   parseSearchResults,
+  parseSubjectCommentVoteAction,
   parseSubjectComments,
   parseSubjectDetail,
   parseSubjectDetailExtras,
+  parseTimelineActionContext,
   parseTimeline,
   parseUserCollection
 } from "../src/douban/parsers";
@@ -217,6 +219,27 @@ describe("Douban parsers", () => {
     });
   });
 
+  it("parses the current user's game collection comment from detail markup", () => {
+    const selection = parseInterestSelection(
+      `
+      <div id="interest_sectl">
+        <div class="collection-section">
+          <span>玩过</span>
+          <input id="n_rating" type="hidden" value="5" />
+          <div class="collection-comment">通关之后我的心里跟眼前凯尔莫罕一样空空荡荡的😑</div>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/game/21355730/"
+    );
+
+    expect(selection).toEqual({
+      status: "done",
+      rating: null,
+      comment: "通关之后我的心里跟眼前凯尔莫罕一样空空荡荡的😑"
+    });
+  });
+
   it("parses the user's collection comment from collection items", () => {
     const result = parseUserCollection(
       `
@@ -235,6 +258,56 @@ describe("Douban parsers", () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0].comment).toBe("喔喔喔喔喔");
+  });
+
+  it("parses game collection comments from collection-comment blocks", () => {
+    const result = parseUserCollection(
+      `
+      <article class="collection-item" data-status="collect">
+        <a href="https://www.douban.com/game/21355730/"><img src="/cover.jpg" /></a>
+        <h3>巫师3：狂猎</h3>
+        <span class="rating" data-rating="5"></span>
+        <div class="collection-comment">通关之后我的心里跟眼前凯尔莫罕一样空空荡荡的😑</div>
+      </article>
+      `,
+      "https://www.douban.com/people/demo/games",
+      "game",
+      "done"
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].comment).toBe("通关之后我的心里跟眼前凯尔莫罕一样空空荡荡的😑");
+  });
+
+  it("parses music comment vote actions from vote-comment handlers", () => {
+    const action = parseSubjectCommentVoteAction(
+      `
+      <div class="comment-list">
+        <li class="comment-item" data-cid="427795822">
+          <span class="comment-vote">
+            <span class="vote-count">174</span>
+            <a href="javascript:;" class="j vote-comment" data-cid="427795822">有用</a>
+          </span>
+        </li>
+      </div>
+      <script>
+        SUBJECT_COMMENTS.createVoteHandler({
+          api: '/j/comment/:id/vote',
+          voteSelector: '.vote-comment',
+          textSelector: '.vote-count'
+        });
+      </script>
+      `,
+      "427795822",
+      "https://music.douban.com/subject/3040149/comments/"
+    );
+
+    expect(action).toEqual({
+      voteUrl: "https://music.douban.com/j/comment/427795822/vote",
+      cancelVoteUrl: null,
+      userVoteState: "not_voted",
+      votes: 174
+    });
   });
 
   it("cleans script and report noise from subject summary", () => {
@@ -374,6 +447,8 @@ describe("Douban parsers", () => {
       { label: "转发", count: 1 },
       { label: "赞", count: 5 }
     ]);
+    expect(items[0].userLikeState).toBe("unknown");
+    expect(items[0].availableActions).toEqual({ like: true, reply: true, repost: true });
   });
 
   it("strips trailing engagement text from timeline body and preserves display order", () => {
@@ -452,5 +527,74 @@ describe("Douban parsers", () => {
     expect(items[0].subjectCoverUrl).toBeNull();
     expect(items[0].photoUrls).toEqual(["https://img3.doubanio.com/view/group_topic/l/public/p1.jpg"]);
     expect(items[0].content).toContain("Trip wrap-up with photos.");
+  });
+
+  it("parses timeline detail action forms and liked state", () => {
+    const context = parseTimelineActionContext(
+      `
+      <div class="new-status status-wrapper" data-sid="s-actions">
+        <div class="status-item" data-sid="s-actions">
+          <a href="/people/demo-user/">好友 A</a>
+          <a href="/people/demo-user/status/s-actions/">5月5日</a>
+          <div class="timeline-actions">
+            <form class="status-unlike-form" method="post" action="/j/status/unlike">
+              <input type="hidden" name="sid" value="s-actions" />
+              <input type="hidden" name="ck" value="mock-ck" />
+              <button type="submit" aria-label="已赞"></button>
+            </form>
+            <form class="status-reply-form" method="post" action="/j/status/reply">
+              <input type="hidden" name="sid" value="s-actions" />
+              <textarea name="reply_text"></textarea>
+              <button type="submit" aria-label="回应"></button>
+            </form>
+            <form class="status-repost-form" method="post" action="/j/status/repost">
+              <input type="hidden" name="sid" value="s-actions" />
+              <textarea name="repost_text"></textarea>
+              <button type="submit" aria-label="转发"></button>
+            </form>
+            <span>3 回应</span><span>2 转发</span><span>9 赞</span>
+          </div>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/",
+      "s-actions"
+    );
+
+    expect(context).not.toBeNull();
+    expect(context?.userLikeState).toBe("liked");
+    expect(context?.availableActions).toEqual({ like: true, reply: true, repost: true });
+    expect(context?.engagements).toEqual([
+      { label: "回应", count: 3 },
+      { label: "转发", count: 2 },
+      { label: "赞", count: 9 }
+    ]);
+    expect(context?.unlikeForm?.actionUrl).toBe("https://www.douban.com/j/status/unlike");
+    expect(context?.replyForm?.textFieldName).toBe("reply_text");
+    expect(context?.repostForm?.textFieldName).toBe("repost_text");
+  });
+
+  it("falls back to action links when detail forms are absent", () => {
+    const context = parseTimelineActionContext(
+      `
+      <div class="status-item" data-sid="s-link-actions">
+        <a href="/people/demo-user/status/s-link-actions/">5月5日</a>
+        <div class="timeline-actions">
+          <a class="timeline-action timeline-action--like" href="/j/status/like?sid=s-link-actions" aria-label="赞"></a>
+          <a class="timeline-action timeline-action--reply" href="/j/status/reply?sid=s-link-actions" aria-label="回应"></a>
+          <a class="timeline-action timeline-action--repost" href="/j/status/repost?sid=s-link-actions" aria-label="转发"></a>
+          <span>1 回应</span><span>0 转发</span><span>2 赞</span>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/",
+      "s-link-actions"
+    );
+
+    expect(context).not.toBeNull();
+    expect(context?.userLikeState).toBe("not_liked");
+    expect(context?.likeForm?.actionUrl).toBe("https://www.douban.com/j/status/like?sid=s-link-actions");
+    expect(context?.replyForm?.actionUrl).toBe("https://www.douban.com/j/status/reply?sid=s-link-actions");
+    expect(context?.repostForm?.actionUrl).toBe("https://www.douban.com/j/status/repost?sid=s-link-actions");
   });
 });

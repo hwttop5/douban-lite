@@ -16,8 +16,10 @@ export function SearchPage() {
     enabled: deferredQuery.length > 0,
     retry: 1
   });
+
   const showSearchSkeleton = deferredQuery.length > 0 && searchQuery.isFetching && !searchQuery.data;
-  const showSearchRefreshHint = deferredQuery.length > 0 && searchQuery.isFetching && Boolean(searchQuery.data?.items.length);
+  const showSearchRefreshHint =
+    deferredQuery.length > 0 && searchQuery.isFetching && Boolean(searchQuery.data?.items.length);
 
   return (
     <div className="page search-page">
@@ -37,12 +39,17 @@ export function SearchPage() {
                 setQuery(nextValue);
               });
             }}
-            placeholder="比如：复仇者联盟 / 红楼梦 / Sea Change"
+            placeholder="比如：霸王别姬 / 红楼梦 / 范特西"
           />
         </label>
       </section>
+
       <div className="card-grid search-results-grid">
-        {showSearchRefreshHint ? <p className="loading-row loading-row--full"><LoadingInline label="正在更新搜索结果" tone="soft" /></p> : null}
+        {showSearchRefreshHint ? (
+          <p className="loading-row loading-row--full">
+            <LoadingInline label="正在更新搜索结果" tone="soft" />
+          </p>
+        ) : null}
         {searchQuery.error ? <p className="form-error">{searchQuery.error.message}</p> : null}
         {showSearchSkeleton ? <SubjectCardSkeletonGrid count={6} /> : null}
         {searchQuery.data?.items.map((item) => (
@@ -54,7 +61,10 @@ export function SearchPage() {
             <span>输入关键词后开始搜索。</span>
           </section>
         ) : null}
-        {deferredQuery.length > 0 && !showSearchSkeleton && !searchQuery.isFetching && searchQuery.data?.items.length === 0 ? (
+        {deferredQuery.length > 0 &&
+        !showSearchSkeleton &&
+        !searchQuery.isFetching &&
+        searchQuery.data?.items.length === 0 ? (
           <section className="empty-state empty-state-panel" role="status">
             <strong>没有找到结果</strong>
             <span>换个更短的关键词，或切换电影、图书、音乐、游戏。</span>

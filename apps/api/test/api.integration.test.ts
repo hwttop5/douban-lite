@@ -20,6 +20,7 @@ describe("API integration", () => {
     context = createApp({
       databaseFile: dbFile,
       dataDir: tmpdir(),
+      doubanAccountsBaseUrl: mock.url,
       doubanPublicBaseUrl: mock.url,
       doubanWebBaseUrl: mock.url,
       disableAutoSync: true,
@@ -52,6 +53,177 @@ describe("API integration", () => {
 
     const gameLibrary = await agent.get("/api/library?medium=game&status=wish").expect(200);
     expect(gameLibrary.body.items[0].subject.doubanId).toBe("30347464");
+  });
+
+  it("logs in through the douban proxy login flow", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    expect(started.body.status).toBe("created");
+    expect(started.body.loginAttemptId).toBeTruthy();
+
+    const login = await agent
+      .post("/api/auth/douban/proxy/password")
+      .send({ loginAttemptId: started.body.loginAttemptId, account: "demo@example.com", password: "secret" })
+      .expect(200);
+
+    expect(login.body.status).toBe("claimed");
+    expect(login.body.user.peopleId).toBe("demo-user");
+    expect(login.body.sessionStatus.status).toBe("valid");
+    expect(login.body.cookie).toBeUndefined();
+
+    const overview = await agent.get("/api/me/overview").expect(200);
+    expect(overview.body.sessionStatus.status).toBe("valid");
+  });
+
+  it("returns SMS-first proxy login config", async () => {
+    const configResponse = await agent.get("/api/auth/douban/proxy/config").expect(200);
+    expect(configResponse.body.enabled).toBe(true);
+    expect(configResponse.body.availableModes).toEqual(["sms", "password"]);
+    expect(configResponse.body.defaultCountryCode).toBe("CN");
+    expect(configResponse.body.supportedCountries[0]).toMatchObject({
+      label: "中国",
+      englishLabel: "China",
+      areaCode: "+86",
+      countryCode: "CN"
+    });
+  });
+
+  it("logs in through the SMS proxy login flow", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+
+    const sent = await agent
+      .post("/api/auth/douban/proxy/sms/send")
+      .send({ loginAttemptId: started.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138001" })
+      .expect(200);
+
+    expect(sent.body.status).toBe("needs_verification");
+    expect(sent.body.verificationMethod).toBe("sms");
+    expect(sent.body.nextAction).toBe("enter_sms_code");
+    expect(sent.body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(sent.body.maskedTarget).toContain("138");
+
+    const verified = await agent
+      .post("/api/auth/douban/proxy/sms/verify")
+      .send({ loginAttemptId: started.body.loginAttemptId, smsCode: "246810" })
+      .expect(200);
+
+    expect(verified.body.status).toBe("claimed");
+    expect(verified.body.user.peopleId).toBe("demo-user");
+    expect(verified.body.sessionStatus.status).toBe("valid");
+
+    const overview = await agent.get("/api/me/overview").expect(200);
+    expect(overview.body.sessionStatus.status).toBe("valid");
+  });
+
+  it("keeps failed proxy login attempts from creating a session", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+
+    const login = await agent
+      .post("/api/auth/douban/proxy/password")
+      .send({ loginAttemptId: started.body.loginAttemptId, account: "demo@example.com", password: "wrong" })
+      .expect(200);
+
+    expect(login.body.status).toBe("failed");
+    expect(login.body.errorCode).toBe("invalid_credentials");
+    await agent.get("/api/me/overview").expect(401);
+  });
+
+  it("keeps SMS attempts reusable after a wrong code and enforces cooldown", async () => {
+    const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+
+    await agent
+      .post("/api/auth/douban/proxy/sms/send")
+      .send({ loginAttemptId: started.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138001" })
+      .expect(200);
+
+    const cooldown = await agent
+      .post("/api/auth/douban/proxy/sms/send")
+      .send({ loginAttemptId: started.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138001" })
+      .expect(200);
+
+    expect(cooldown.body.status).toBe("needs_verification");
+    expect(cooldown.body.errorCode).toBe("sms_cooldown");
+    expect(cooldown.body.nextAction).toBe("wait_retry");
+
+    const wrongCode = await agent
+      .post("/api/auth/douban/proxy/sms/verify")
+      .send({ loginAttemptId: started.body.loginAttemptId, smsCode: "000000" })
+      .expect(200);
+
+    expect(wrongCode.body.status).toBe("needs_verification");
+    expect(wrongCode.body.errorCode).toBe("invalid_sms_code");
+    expect(wrongCode.body.nextAction).toBe("enter_sms_code");
+
+    await agent.get("/api/me/overview").expect(401);
+  });
+
+  it("returns an expired status when the proxy login attempt has timed out", async () => {
+    const expiredMock = await createMockDoubanServer();
+    const expiredDbFile = join(tmpdir(), `douban-lite-expired-${randomUUID()}.db`);
+    const expiredContext = createApp({
+      databaseFile: expiredDbFile,
+      dataDir: tmpdir(),
+      doubanAccountsBaseUrl: expiredMock.url,
+      doubanPublicBaseUrl: expiredMock.url,
+      doubanWebBaseUrl: expiredMock.url,
+      doubanProxyLoginAttemptTtlMinutes: 0,
+      disableAutoSync: true,
+      allowedOrigin: null
+    });
+    const expiredAgent = request.agent(expiredContext.app);
+
+    try {
+      const started = await expiredAgent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+      expect(started.body.status).toBe("created");
+
+      const expired = await expiredAgent
+        .post("/api/auth/douban/proxy/sms/send")
+        .send({ loginAttemptId: started.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138001" })
+        .expect(200);
+
+      expect(expired.body.status).toBe("expired");
+      expect(expired.body.errorCode).toBe("attempt_expired");
+      await expiredAgent.get("/api/me/overview").expect(401);
+    } finally {
+      expiredContext.close();
+      await expiredMock.close();
+      rmSync(expiredDbFile, { force: true });
+    }
+  });
+
+  it("reports proxy login verification and security challenge states", async () => {
+    const captchaAttempt = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const captcha = await agent
+      .post("/api/auth/douban/proxy/password")
+      .send({ loginAttemptId: captchaAttempt.body.loginAttemptId, account: "captcha@example.com", password: "secret" })
+      .expect(200);
+    expect(captcha.body.status).toBe("blocked");
+    expect(captcha.body.errorCode).toBe("needs_captcha");
+
+    const blockedAttempt = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const blocked = await agent
+      .post("/api/auth/douban/proxy/password")
+      .send({ loginAttemptId: blockedAttempt.body.loginAttemptId, account: "blocked@example.com", password: "secret" })
+      .expect(200);
+    expect(blocked.body.status).toBe("blocked");
+    expect(blocked.body.errorCode).toBe("security_challenge");
+  });
+
+  it("blocks unsupported SMS verification challenges", async () => {
+    const captchaAttempt = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const captcha = await agent
+      .post("/api/auth/douban/proxy/sms/send")
+      .send({ loginAttemptId: captchaAttempt.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138002" })
+      .expect(200);
+    expect(captcha.body.status).toBe("blocked");
+    expect(captcha.body.errorCode).toBe("needs_captcha");
+
+    const blockedAttempt = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
+    const blocked = await agent
+      .post("/api/auth/douban/proxy/sms/send")
+      .send({ loginAttemptId: blockedAttempt.body.loginAttemptId, countryCode: "CN", phoneNumber: "13800138003" })
+      .expect(200);
+    expect(blocked.body.status).toBe("blocked");
+    expect(blocked.body.errorCode).toBe("security_challenge");
   });
 
   it("serves public search, detail, and ranking data", async () => {
@@ -139,6 +311,37 @@ describe("API integration", () => {
     expect(nextPage.body.hasMore).toBe(false);
   });
 
+  it("likes, replies to, and reposts timeline statuses", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const timeline = await agent.get("/api/timeline?scope=following").expect(200);
+    const item = timeline.body.items[0];
+    expect(item.detailUrl).toBeTruthy();
+
+    const liked = await agent.post(`/api/timeline/${item.id}/like`).send({ detailUrl: item.detailUrl }).expect(200);
+    expect(["liked", "not_liked"]).toContain(liked.body.userLikeState);
+    const afterLike = mock.readTimelineState(item.id);
+    expect(afterLike).not.toBeNull();
+    const replyBaseline = afterLike!.engagements.reply;
+    const repostBaseline = afterLike!.engagements.repost;
+
+    const replied = await agent
+      .post(`/api/timeline/${item.id}/reply`)
+      .send({ detailUrl: item.detailUrl, text: "这条动态我来回复一下。" })
+      .expect(200);
+    expect(replied.body.engagements.find((entry: { label: string; count: number | null }) => entry.label === "回应")?.count).toBe(replyBaseline + 1);
+
+    const reposted = await agent.post(`/api/timeline/${item.id}/repost`).send({ detailUrl: item.detailUrl, text: "转一下。" }).expect(200);
+    expect(reposted.body.engagements.find((entry: { label: string; count: number | null }) => entry.label === "转发")?.count).toBe(repostBaseline + 1);
+  });
+
+  it("validates timeline action payloads", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    await agent.post("/api/timeline/following-1/like").send({ detailUrl: "not-a-url" }).expect(400);
+    await agent.post("/api/timeline/following-1/reply").send({ detailUrl: "https://example.com/status", text: "" }).expect(400);
+  });
+
   it("isolates personal state between users", async () => {
     await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake-a; ck=test-a;", peopleId: "demo-user-a" }).expect(200);
     await secondAgent.post("/api/auth/douban").send({ cookie: "dbcl2=fake-b; ck=test-b;", peopleId: "demo-user-b" }).expect(200);
@@ -158,6 +361,7 @@ describe("API integration", () => {
   it("returns 401 for personal endpoints without auth", async () => {
     await request(context.app).get("/api/me/overview").expect(401);
     await request(context.app).get("/api/timeline?scope=following").expect(401);
+    await request(context.app).post("/api/timeline/following-1/like").send({ detailUrl: "https://www.douban.com/people/demo-user/status/following-1/" }).expect(401);
     await request(context.app).post("/api/sync/pull").send({}).expect(401);
   });
 });

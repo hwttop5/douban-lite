@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getAuthMe, importDoubanSession, logoutDoubanSession } from "./api";
+import {
+  ApiError,
+  getAuthMe,
+  getDoubanProxyLoginConfig,
+  importDoubanSession,
+  logoutDoubanSession,
+  sendDoubanProxySmsCode,
+  startDoubanProxyLogin,
+  submitDoubanProxyPassword,
+  verifyDoubanProxySmsCode
+} from "./api";
 
 describe("auth-related API routes", () => {
   afterEach(() => {
@@ -7,7 +17,11 @@ describe("auth-related API routes", () => {
   });
 
   it("uses session-safe endpoints instead of NextAuth-style auth paths", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ authenticated: false, user: null, sessionStatus: { status: "missing", peopleId: null, displayName: null, avatarUrl: null, lastCheckedAt: null, lastError: null } }), {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      authenticated: false,
+      user: null,
+      sessionStatus: { status: "missing", peopleId: null, displayName: null, avatarUrl: null, lastCheckedAt: null, lastError: null }
+    }), {
       status: 200,
       headers: { "content-type": "application/json" }
     }));
@@ -16,6 +30,11 @@ describe("auth-related API routes", () => {
     await importDoubanSession("dbcl2=fake; ck=test;");
     await logoutDoubanSession();
     await getAuthMe();
+    await getDoubanProxyLoginConfig();
+    await startDoubanProxyLogin();
+    await sendDoubanProxySmsCode({ loginAttemptId: "attempt-1", countryCode: "CN", phoneNumber: "13800138001" });
+    await verifyDoubanProxySmsCode({ loginAttemptId: "attempt-1", smsCode: "246810" });
+    await submitDoubanProxyPassword({ loginAttemptId: "attempt-1", account: "demo@example.com", password: "secret" });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -28,6 +47,11 @@ describe("auth-related API routes", () => {
       expect.objectContaining({ method: "POST" })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session/me", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/auth/douban/proxy/config", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/auth/douban/proxy/start", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/auth/douban/proxy/sms/send", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/auth/douban/proxy/sms/verify", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/auth/douban/proxy/password", expect.objectContaining({ method: "POST" }));
   });
 
   it("maps HTML error pages to a proxy-target diagnostic", async () => {

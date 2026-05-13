@@ -1,7 +1,10 @@
 import type {
   AuthMeResponse,
-  DoubanSessionStatus,
   DoubanLoginResponse,
+  DoubanProxyLoginConfigResponse,
+  DoubanProxyLoginStatusResponse,
+  DoubanProxyLoginSubmitResponse,
+  DoubanSessionStatus,
   LibraryResponse,
   Medium,
   OverviewResponse,
@@ -13,6 +16,7 @@ import type {
   SubjectDetailResponse,
   SyncEventRecord,
   SyncJobRecord,
+  TimelineActionResponse,
   TimelineResponse,
   TimelineScope,
   UpdateLibraryStateInput
@@ -60,7 +64,7 @@ async function request<T>(path: string, options: RequestInit = {}) {
     if (typeof payload === "string" && contentType.includes("text/html")) {
       throw new ApiError("douban-lite API 没有连到当前前端，请启动项目自带 API，或检查 VITE_API_BASE_URL / VITE_API_PROXY_TARGET。", response.status);
     }
-    throw new ApiError(typeof payload === "string" ? payload : payload.error ?? "Request failed", response.status);
+    throw new ApiError(typeof payload === "string" ? payload : payload.error ?? "请求失败。", response.status);
   }
   return payload as T;
 }
@@ -123,6 +127,27 @@ export function getTimeline(scope: TimelineScope, start = 0) {
   return request<TimelineResponse>(`/api/timeline?${params.toString()}`);
 }
 
+export function likeTimelineStatus(statusId: string, detailUrl: string) {
+  return request<TimelineActionResponse>(`/api/timeline/${statusId}/like`, {
+    method: "POST",
+    body: JSON.stringify({ detailUrl })
+  });
+}
+
+export function replyTimelineStatus(statusId: string, detailUrl: string, text: string) {
+  return request<TimelineActionResponse>(`/api/timeline/${statusId}/reply`, {
+    method: "POST",
+    body: JSON.stringify({ detailUrl, text })
+  });
+}
+
+export function repostTimelineStatus(statusId: string, detailUrl: string, text?: string) {
+  return request<TimelineActionResponse>(`/api/timeline/${statusId}/repost`, {
+    method: "POST",
+    body: JSON.stringify(text != null ? { detailUrl, text } : { detailUrl })
+  });
+}
+
 export function updateLibraryState(medium: Medium, doubanId: string, input: UpdateLibraryStateInput) {
   return request<{ job: SyncJobRecord; userItem: SubjectDetailResponse["userItem"] }>(`/api/library/${medium}/${doubanId}/state`, {
     method: "POST",
@@ -134,6 +159,37 @@ export function importDoubanSession(cookie: string) {
   return request<DoubanLoginResponse>("/api/settings/douban-session/import", {
     method: "POST",
     body: JSON.stringify({ cookie })
+  });
+}
+
+export function getDoubanProxyLoginConfig() {
+  return request<DoubanProxyLoginConfigResponse>("/api/auth/douban/proxy/config");
+}
+
+export function startDoubanProxyLogin() {
+  return request<DoubanProxyLoginStatusResponse>("/api/auth/douban/proxy/start", {
+    method: "POST"
+  });
+}
+
+export function submitDoubanProxyPassword(input: { loginAttemptId: string; account: string; password: string; countryCode?: string }) {
+  return request<DoubanProxyLoginSubmitResponse>("/api/auth/douban/proxy/password", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function sendDoubanProxySmsCode(input: { loginAttemptId: string; phoneNumber: string; countryCode?: string }) {
+  return request<DoubanProxyLoginStatusResponse>("/api/auth/douban/proxy/sms/send", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function verifyDoubanProxySmsCode(input: { loginAttemptId: string; smsCode: string }) {
+  return request<DoubanProxyLoginSubmitResponse>("/api/auth/douban/proxy/sms/verify", {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 
