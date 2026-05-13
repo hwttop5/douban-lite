@@ -457,14 +457,12 @@ export class ProxyLoginService {
       return this.snapshot(attempt);
     }
 
-    const ck = attempt.cookieJar.get("ck") ?? "";
-    if (!ck) {
-      return this.blockAttempt(attempt, "security_challenge", "二维码登录状态丢失，请重新获取二维码。", "start_qr", "qr");
-    }
-
     try {
       const url = new URL(`${this.options.accountsBaseUrl}/j/mobile/login/qrlogin_status`);
-      url.searchParams.set("ck", ck);
+      // Douban's QR login page currently may only set a guest bid cookie. The
+      // QR status endpoint still accepts an empty ck value, so keep polling
+      // instead of failing before Douban can return scan/login.
+      url.searchParams.set("ck", attempt.cookieJar.get("ck") ?? "");
       url.searchParams.set("code", attempt.qrCode);
       const response = await this.request(attempt, url.toString(), {
         method: "GET",

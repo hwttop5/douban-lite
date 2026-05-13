@@ -45,6 +45,7 @@ export interface ParsedTimelineActionForm {
   method: "POST" | "GET";
   defaultFields: Record<string, string>;
   textFieldName: string | null;
+  includeStatusFields?: boolean;
 }
 
 export interface ParsedTimelineActionContext {
@@ -1366,6 +1367,22 @@ function parseTimelineActionKind(input: string) {
 
 function parseTimelineActionLikeState($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>): TimelineItem["userLikeState"] {
   let state: TimelineItem["userLikeState"] = "unknown";
+  let foundLikedReaction = false;
+  root.find(".react-btn[data-reaction_type]").each((_, element) => {
+    const current = $(element);
+    const reactionType = Number(current.attr("data-reaction_type"));
+    const className = current.attr("class") ?? "";
+    if (reactionType === 1 || /\breact-cancel-like\b/.test(className)) {
+      foundLikedReaction = true;
+      return false;
+    }
+    if (reactionType === 0 || /\breact-like\b/.test(className)) {
+      state = "not_liked";
+    }
+  });
+  if (foundLikedReaction) {
+    return "liked";
+  }
   root.find("form, a, button, [data-href], [data-action]").each((_, element) => {
     if (state === "liked") {
       return;
@@ -1386,6 +1403,18 @@ function parseTimelineActionLikeState($: cheerio.CheerioAPI, root: cheerio.Cheer
     }
   });
   return state;
+}
+
+function isJavascriptActionUrl(value: string) {
+  return /^javascript:/i.test(value.trim());
+}
+
+function timelineRexxarBase(baseUrl: string) {
+  const parsed = new URL(baseUrl);
+  if (/(^|\.)douban\.com$/i.test(parsed.hostname)) {
+    return "https://m.douban.com/rexxar/api/v2";
+  }
+  return new URL("/rexxar/api/v2", parsed.origin).toString().replace(/\/$/, "");
 }
 
 function parseTimelineAvailableActions($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>) {
@@ -1463,11 +1492,11 @@ function parseTimelineActionLink(root: cheerio.Cheerio<any>, baseUrl: string): P
     return null;
   }
   const href = root.attr("data-href") ?? root.attr("href");
-  if (!href) {
+  if (!href || isJavascriptActionUrl(href)) {
     return null;
   }
   const actionUrl = absoluteUrl(baseUrl, href);
-  if (!actionUrl) {
+  if (!actionUrl || isJavascriptActionUrl(actionUrl)) {
     return null;
   }
   const defaultFields: Record<string, string> = {};
@@ -1488,6 +1517,76 @@ function parseTimelineActionLink(root: cheerio.Cheerio<any>, baseUrl: string): P
     method: (root.attr("data-method")?.toUpperCase() === "GET" ? "GET" : "POST") as "GET" | "POST",
     defaultFields,
     textFieldName: null
+  };
+}
+
+function parseTimelineReactActionForm(
+  $: cheerio.CheerioAPI,
+  root: cheerio.Cheerio<any>,
+  baseUrl: string,
+  statusId: string,
+  reactionType: "like" | "unlike"
+): ParsedTimelineActionForm | null {
+  const button = root
+    .find(".react-btn[data-type][data-object_id], .react-btn[data-object-id]")
+    .filter((_, element) => {
+      const current = $(element);
+      const objectId = current.attr("data-object_id") ?? current.attr("data-object-id");
+      const type = current.attr("data-type") ?? "status";
+      return type === "status" && objectId === statusId;
+    })
+    .first();
+  if (button.length === 0) {
+    return null;
+  }
+  const objectId = button.attr("data-object_id") ?? button.attr("data-object-id") ?? statusId;
+  const type = button.attr("data-type") ?? "status";
+  return {
+    actionUrl: `${timelineRexxarBase(baseUrl)}/${encodeURIComponent(type)}/${encodeURIComponent(objectId)}/react`,
+    method: "POST",
+    defaultFields: {
+      reaction_type: reactionType === "like" ? "1" : "0"
+    },
+    textFieldName: null,
+    includeStatusFields: false
+  };
+}
+
+function parseTimelineCommentsReplyForm(html: string, baseUrl: string, statusId: string): ParsedTimelineActionForm | null {
+  const config = html.match(/_COMMENTS_CONFIG\s*=\s*\{[\s\S]*?\};/)?.[0];
+  if (!config) {
+    return null;
+  }
+  const api = config.match(/['"]api['"]\s*:\s*['"]([^'"]+)['"]/)?.[1] ?? "/j/status";
+  const target = config.match(/['"]target['"]\s*:\s*\{[\s\S]*?['"]id['"]\s*:\s*['"]([^'"]+)['"]/)?.[1];
+  if (target !== statusId || /['"]can_add_comment['"]\s*:\s*false/.test(config)) {
+    return null;
+  }
+  const usesCustomApi = /useCustomApi['"]?\s*:\s*true/.test(config);
+  return {
+    actionUrl: new URL(`${api.replace(/\/$/, "")}/${encodeURIComponent(target)}/add_comment`, baseUrl).toString(),
+    method: "POST",
+    defaultFields: {
+      resp_type: "c_dict",
+      ...(usesCustomApi ? { sync_to_status: "" } : { sync_to_mb: "" })
+    },
+    textFieldName: usesCustomApi ? "text" : "rv_comment",
+    includeStatusFields: false
+  };
+}
+
+function parseTimelineNewRepostForm(root: cheerio.Cheerio<any>, baseUrl: string, statusId: string): ParsedTimelineActionForm | null {
+  const trigger = root.find(".reshare-add.new-reshare, [data-action-type='reshare']").first();
+  if (trigger.length === 0) {
+    return null;
+  }
+  return {
+    actionUrl: new URL("/j/status/reshare", baseUrl).toString(),
+    method: "POST",
+    defaultFields: {
+      sid: statusId
+    },
+    textFieldName: "text"
   };
 }
 
@@ -1556,17 +1655,28 @@ export function parseTimelineActionContext(html: string, baseUrl: string, status
     wrapper.find(".timeline-actions, .status-actions, .actions, .operations, .operation-div, .action-bar, .status-op").first().length > 0
       ? wrapper.find(".timeline-actions, .status-actions, .actions, .operations, .operation-div, .action-bar, .status-op").first()
       : wrapper;
-  const engagementsSource = timelineText(actionRoot).length > 0 ? timelineText(actionRoot) : timelineText(wrapper);
+  const actionEngagementText = timelineEngagementText(actionRoot);
+  const engagementsSource = actionEngagementText.length > 0 ? actionEngagementText : timelineText(actionRoot).length > 0 ? timelineText(actionRoot) : timelineText(wrapper);
   const availableActions = parseTimelineAvailableActions($, actionRoot);
+  const likeForm = parseTimelineReactActionForm($, actionRoot, baseUrl, statusId, "like") ?? parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "like");
+  const unlikeForm =
+    parseTimelineReactActionForm($, actionRoot, baseUrl, statusId, "unlike") ?? parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "unlike");
+  const replyForm = parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "reply") ?? parseTimelineCommentsReplyForm(html, baseUrl, statusId);
+  const repostForm =
+    parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "repost") ?? parseTimelineNewRepostForm(actionRoot, baseUrl, statusId);
   return {
     statusId,
     engagements: parseEngagements(engagementsSource),
     userLikeState: parseTimelineActionLikeState($, actionRoot),
-    availableActions,
-    likeForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "like"),
-    unlikeForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "unlike"),
-    replyForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "reply"),
-    repostForm: parseTimelineActionFormByKind($, actionRoot, baseUrl, (kind) => kind === "repost")
+    availableActions: {
+      like: availableActions.like || Boolean(likeForm || unlikeForm),
+      reply: availableActions.reply || Boolean(replyForm),
+      repost: availableActions.repost || Boolean(repostForm)
+    },
+    likeForm,
+    unlikeForm,
+    replyForm,
+    repostForm
   };
 }
 
@@ -1621,6 +1731,12 @@ function cleanTimelineContent(input: string, removeParts: Array<string | null>) 
 function timelineText(root: cheerio.Cheerio<any>) {
   const clone = root.clone();
   clone.find("script, style, noscript, template").remove();
+  return safeText(clone.text()) ?? "";
+}
+
+function timelineEngagementText(root: cheerio.Cheerio<any>) {
+  const clone = root.clone();
+  clone.find("script, style, noscript, template, .action-react, .action-reshare, .react-btn, .reshare-add").remove();
   return safeText(clone.text()) ?? "";
 }
 

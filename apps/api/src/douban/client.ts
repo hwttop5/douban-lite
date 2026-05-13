@@ -279,7 +279,7 @@ export class DoubanClient {
   ) {
     const body = new URLSearchParams(form.defaultFields);
     const knownStatusKeys = ["sid", "status_id", "statusid", "id"];
-    if (!knownStatusKeys.some((key) => body.has(key))) {
+    if (form.includeStatusFields !== false && !knownStatusKeys.some((key) => body.has(key))) {
       body.set("sid", statusId);
       body.set("status_id", statusId);
     }

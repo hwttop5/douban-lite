@@ -14,6 +14,11 @@ interface TimelineDialogState {
 
 type TimelineEngagementLabel = TimelineItem["engagements"][number]["label"];
 
+interface TimelineCountFallback {
+  label: TimelineEngagementLabel;
+  count: (item: TimelineItem) => number;
+}
+
 function subjectRouteFromUrl(url: string | null) {
   if (!url) {
     return null;
@@ -64,7 +69,45 @@ function timelineCount(engagements: TimelineItem["engagements"], label: Timeline
   return engagements.find((item) => item.label === label)?.count ?? 0;
 }
 
-function updateTimelinePages(current: InfiniteData<TimelineResponse, number> | undefined, result: TimelineActionResponse) {
+function hasNumericEngagement(engagements: TimelineActionResponse["engagements"], label: TimelineEngagementLabel) {
+  return typeof engagements.find((item) => item.label === label)?.count === "number";
+}
+
+function mergeTimelineEngagements(current: TimelineItem["engagements"], next: TimelineActionResponse["engagements"]) {
+  const labels = new Set<TimelineEngagementLabel>([...current.map((item) => item.label), ...next.map((item) => item.label)]);
+  return Array.from(labels).map((label) => {
+    const currentEngagement = current.find((item) => item.label === label);
+    const nextEngagement = next.find((item) => item.label === label);
+    if (!currentEngagement) {
+      return nextEngagement!;
+    }
+    if (!nextEngagement) {
+      return currentEngagement;
+    }
+    return {
+      label,
+      count: nextEngagement.count ?? currentEngagement.count
+    };
+  });
+}
+
+function setTimelineEngagementCount(engagements: TimelineItem["engagements"], label: TimelineEngagementLabel, count: number) {
+  let found = false;
+  const next = engagements.map((item) => {
+    if (item.label !== label) {
+      return item;
+    }
+    found = true;
+    return { ...item, count };
+  });
+  return found ? next : [...next, { label, count }];
+}
+
+function updateTimelinePages(
+  current: InfiniteData<TimelineResponse, number> | undefined,
+  result: TimelineActionResponse,
+  fallback?: TimelineCountFallback
+) {
   if (!current) {
     return current;
   }
@@ -74,20 +117,27 @@ function updateTimelinePages(current: InfiniteData<TimelineResponse, number> | u
       ...page,
       items: page.items.map((item) =>
         item.id === result.statusId
-          ? {
-              ...item,
-              engagements: result.engagements,
-              userLikeState: result.userLikeState ?? item.userLikeState
-            }
+          ? (() => {
+              const mergedEngagements = mergeTimelineEngagements(item.engagements, result.engagements);
+              const engagements =
+                fallback && !hasNumericEngagement(result.engagements, fallback.label)
+                  ? setTimelineEngagementCount(mergedEngagements, fallback.label, fallback.count(item))
+                  : mergedEngagements;
+              return {
+                ...item,
+                engagements,
+                userLikeState: result.userLikeState ?? item.userLikeState
+              };
+            })()
           : item
       )
     }))
   };
 }
 
-function applyTimelineActionResult(queryClient: ReturnType<typeof useQueryClient>, result: TimelineActionResponse) {
+function applyTimelineActionResult(queryClient: ReturnType<typeof useQueryClient>, result: TimelineActionResponse, fallback?: TimelineCountFallback) {
   queryClient.setQueriesData({ queryKey: ["timeline"] }, (current: InfiniteData<TimelineResponse, number> | undefined) =>
-    updateTimelinePages(current, result)
+    updateTimelinePages(current, result, fallback)
   );
 }
 
@@ -148,7 +198,22 @@ export function TimelinePage() {
       return likeTimelineStatus(item.id, item.detailUrl);
     },
     onSuccess: (result) => {
-      applyTimelineActionResult(queryClient, result);
+      applyTimelineActionResult(
+        queryClient,
+        result,
+        result.userLikeState
+          ? {
+              label: "赞",
+              count: (currentItem) => {
+                const currentCount = timelineCount(currentItem.engagements, "赞");
+                if (currentItem.userLikeState === result.userLikeState) {
+                  return currentCount;
+                }
+                return result.userLikeState === "liked" ? currentCount + 1 : Math.max(0, currentCount - 1);
+              }
+            }
+          : undefined
+      );
     },
     onError: (error) => {
       refreshAuthIfNeeded(error, queryClient);
@@ -165,8 +230,12 @@ export function TimelinePage() {
       }
       return repostTimelineStatus(state.item.id, state.item.detailUrl, state.text.trim() || undefined);
     },
-    onSuccess: (result) => {
-      applyTimelineActionResult(queryClient, result);
+    onSuccess: (result, state) => {
+      const label = state.mode === "reply" ? "回应" : "转发";
+      applyTimelineActionResult(queryClient, result, {
+        label,
+        count: (item) => timelineCount(item.engagements, label) + 1
+      });
       setDialog(null);
     },
     onError: (error) => {

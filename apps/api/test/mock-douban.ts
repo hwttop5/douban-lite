@@ -404,24 +404,20 @@ function ensureTimelineStateById(timelineStates: Map<string, MockTimelineState>,
 function renderTimelineActions(status: MockTimelineState, detailMode = false) {
   if (detailMode) {
     return `
-      <div class="timeline-actions">
-        <form class="${status.liked ? "status-unlike-form" : "status-like-form"}" method="post" action="/j/status/${status.liked ? "unlike" : "like"}">
-          <input type="hidden" name="sid" value="${status.id}" />
-          <input type="hidden" name="ck" value="mock-ck" />
-          <button type="submit" aria-label="${status.liked ? "已赞" : "赞"}"></button>
-        </form>
-        <form class="status-reply-form" method="post" action="/j/status/reply">
-          <input type="hidden" name="sid" value="${status.id}" />
-          <input type="hidden" name="ck" value="mock-ck" />
-          <textarea name="reply_text"></textarea>
-          <button type="submit" aria-label="回应"></button>
-        </form>
-        <form class="status-repost-form" method="post" action="/j/status/repost">
-          <input type="hidden" name="sid" value="${status.id}" />
-          <input type="hidden" name="ck" value="mock-ck" />
-          <textarea name="repost_text"></textarea>
-          <button type="submit" aria-label="转发"></button>
-        </form>
+      <div class="actions">
+        <div class="action-react">
+          <a href="javascript:void(0);"
+             data-type="status"
+             class="${status.liked ? "react-cancel-like" : "react-like"} react-btn"
+             data-reaction_type="${status.liked ? 1 : 0}"
+             data-object_id="${status.id}">
+            <span class="react-text"></span>
+            <span class="react-num"></span>
+          </a>
+        </div>
+        <div class="action-reshare">
+          <a href="javascript:;" class="reshare-add new-reshare" data-action-type="reshare"></a>
+        </div>
         <span>${status.engagements.reply} 回应</span><span>${status.engagements.repost} 转发</span><span>${status.engagements.like} 赞</span>
       </div>`;
   }
@@ -447,6 +443,18 @@ function renderTimelineStatus(status: MockTimelineState, detailMode = false) {
         <a href="/people/${status.peopleId}/status/${status.id}/">${status.createdAtText}</a>
         ${renderTimelineActions(status, detailMode)}
       </div>
+      ${
+        detailMode
+          ? `<div id="comments" class="comment-list"></div>
+        <script>
+          var _COMMENTS_CONFIG = {
+            'api': '/j/status',
+            'target': {"kind":3055,"id":"${status.id}","can_add_comment":true},
+            'options': {'enable_comment_sync_to_status': true}
+          };
+        </script>`
+          : ""
+      }
     </div>`;
 }
 
@@ -500,7 +508,7 @@ export async function createMockDoubanServer() {
   });
 
   app.get("/passport/login", (_request, response) => {
-    response.setHeader("Set-Cookie", ["bid=mock-bid; Path=/", "ck=mock-guest-ck; Path=/"]);
+    response.setHeader("Set-Cookie", ["bid=mock-bid; Path=/"]);
     response.send(`
       <html><body>
         <script>window._CONFIG = {"douban_account":"http://mock.local","supported_countries":"[[&quot;中国&quot;,&quot;China&quot;,&quot;+86&quot;,&quot;CN&quot;],[&quot;美国&quot;,&quot;United States&quot;,&quot;+1&quot;,&quot;US&quot;]]"};</script>
@@ -760,6 +768,20 @@ export async function createMockDoubanServer() {
     response.json({ ok: true });
   });
 
+  app.post("/rexxar/api/v2/status/:statusId/react", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", request.params.statusId);
+    const reactionType = Number(request.body.reaction_type ?? 0);
+    if (reactionType === 1 && !state.liked) {
+      state.liked = true;
+      state.engagements.like += 1;
+    }
+    if (reactionType === 0 && state.liked) {
+      state.liked = false;
+      state.engagements.like = Math.max(0, state.engagements.like - 1);
+    }
+    response.json({ reaction_type: state.liked ? 1 : 0 });
+  });
+
   app.post("/j/status/reply", (request, response) => {
     const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
     if (String(request.body.reply_text ?? "").trim().length > 0) {
@@ -768,10 +790,24 @@ export async function createMockDoubanServer() {
     response.json({ ok: true });
   });
 
+  app.post("/j/status/:statusId/add_comment", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", request.params.statusId);
+    if (String(request.body.rv_comment ?? request.body.text ?? "").trim().length > 0) {
+      state.engagements.reply += 1;
+    }
+    response.json({ code: 0, data: { id: `comment-${state.engagements.reply}`, text: request.body.rv_comment ?? request.body.text ?? "" } });
+  });
+
   app.post("/j/status/repost", (request, response) => {
     const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
     state.engagements.repost += 1;
     response.json({ ok: true });
+  });
+
+  app.post("/j/status/reshare", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", String(request.body.sid ?? request.body.status_id ?? request.query.sid ?? ""));
+    state.engagements.repost += 1;
+    response.json({ r: 0, ok: true });
   });
 
   app.post("/:medium/subject/:doubanId/interest", (request, response) => {

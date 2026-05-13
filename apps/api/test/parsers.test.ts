@@ -597,4 +597,45 @@ describe("Douban parsers", () => {
     expect(context?.replyForm?.actionUrl).toBe("https://www.douban.com/j/status/reply?sid=s-link-actions");
     expect(context?.repostForm?.actionUrl).toBe("https://www.douban.com/j/status/repost?sid=s-link-actions");
   });
+
+  it("parses current Douban JS timeline actions", () => {
+    const context = parseTimelineActionContext(
+      `
+      <div class="new-status status-wrapper" data-sid="s-js-actions">
+        <div class="status-item" data-sid="s-js-actions">
+          <div class="actions">
+            <div class="action-react">
+              <a href="javascript:void(0);" data-type="status" class="react-like react-btn" data-reaction_type="0" data-object_id="s-js-actions">
+                <span class="react-text">赞</span>
+              </a>
+            </div>
+            <div class="action-reshare">
+              <a href="javascript:;" class="reshare-add new-reshare" data-action-type="reshare">转发</a>
+            </div>
+          </div>
+        </div>
+        <script>
+          var _COMMENTS_CONFIG = {
+            'api': '/j/status',
+            'target': {"kind":3055,"id":"s-js-actions","can_add_comment":true},
+            'options': {'enable_comment_sync_to_status': true}
+          };
+        </script>
+      </div>
+      `,
+      "https://www.douban.com/people/demo-user/status/s-js-actions/",
+      "s-js-actions"
+    );
+
+    expect(context).not.toBeNull();
+    expect(context?.userLikeState).toBe("not_liked");
+    expect(context?.availableActions).toEqual({ like: true, reply: true, repost: true });
+    expect(context?.likeForm?.actionUrl).toBe("https://m.douban.com/rexxar/api/v2/status/s-js-actions/react");
+    expect(context?.likeForm?.defaultFields.reaction_type).toBe("1");
+    expect(context?.unlikeForm?.defaultFields.reaction_type).toBe("0");
+    expect(context?.replyForm?.actionUrl).toBe("https://www.douban.com/j/status/s-js-actions/add_comment");
+    expect(context?.replyForm?.textFieldName).toBe("rv_comment");
+    expect(context?.repostForm?.actionUrl).toBe("https://www.douban.com/j/status/reshare");
+    expect(context?.repostForm?.textFieldName).toBe("text");
+  });
 });
