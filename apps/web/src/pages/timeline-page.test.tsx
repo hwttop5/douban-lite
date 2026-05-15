@@ -3,9 +3,25 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AuthMeResponse, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
+import type { AuthMeResponse, TimelineCommentsResponse, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
+import { ApiError } from "../api";
 import * as api from "../api";
 import { TimelinePage } from "./timeline-page";
+
+class MockIntersectionObserver {
+  static instances: MockIntersectionObserver[] = [];
+
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(
+    public callback: IntersectionObserverCallback,
+    public options?: IntersectionObserverInit
+  ) {
+    MockIntersectionObserver.instances.push(this);
+  }
+}
 
 function createTimelineItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   return {
@@ -70,9 +86,15 @@ function renderPage(items: TimelineItem[], options: { stale?: boolean } = {}) {
     stale: options.stale ?? false,
     items
   } satisfies TimelineResponse);
+  if (!vi.isMockFunction(api.getTimelineComments)) {
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: items[0]?.id ?? "status-1",
+      comments: []
+    });
+  }
 
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={createTestQueryClient()}>
       <MemoryRouter>
         <TimelinePage />
       </MemoryRouter>
@@ -80,10 +102,33 @@ function renderPage(items: TimelineItem[], options: { stale?: boolean } = {}) {
   );
 }
 
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retryDelay: 1
+      }
+    }
+  });
+}
+
+function triggerAutoLoad() {
+  const observer = MockIntersectionObserver.instances.at(-1);
+  if (!observer) {
+    throw new Error("expected auto load observer");
+  }
+  const target = observer.observe.mock.calls.at(-1)?.[0] as HTMLDivElement | undefined;
+  if (!target) {
+    throw new Error("expected auto load sentinel");
+  }
+  observer.callback([{ isIntersecting: true, target } as unknown as IntersectionObserverEntry], observer as unknown as IntersectionObserver);
+}
+
 describe("TimelinePage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders image-only statuses without the linked-subject card", async () => {
@@ -149,6 +194,19 @@ describe("TimelinePage", () => {
   it("submits a reply from the dialog and refreshes the count", async () => {
     mockAuth();
     const user = userEvent.setup();
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: "status-reply",
+      comments: [
+        {
+          id: "comment-1",
+          author: "Alice",
+          authorUrl: "https://www.douban.com/people/alice/",
+          authorAvatarUrl: null,
+          content: "\u5148\u524d\u7684\u56de\u590d",
+          createdAt: "\u521a\u521a"
+        }
+      ]
+    });
     vi.spyOn(api, "replyTimelineStatus").mockResolvedValue({
       statusId: "status-reply",
       engagements: [
@@ -161,6 +219,8 @@ describe("TimelinePage", () => {
     renderPage([createTimelineItem({ id: "status-reply" })]);
 
     await user.click(await screen.findByRole("button", { name: "\u56de\u590d (1)" }));
+    expect(await screen.findByText("\u5148\u524d\u7684\u56de\u590d")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "\u5199\u56de\u590d" }));
     expect(await screen.findByRole("heading", { name: "\u56de\u590d\u52a8\u6001" })).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText("\u5199\u4e0b\u4f60\u7684\u56de\u590d"), "\u6536\u5230");
     await user.click(screen.getByRole("button", { name: "\u53d1\u9001" }));
@@ -195,6 +255,62 @@ describe("TimelinePage", () => {
     expect(await screen.findByRole("button", { name: "\u8f6c\u53d1 (1)" })).toBeInTheDocument();
   });
 
+  it("expands and collapses timeline comments from the reply count", async () => {
+    mockAuth();
+    const user = userEvent.setup();
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: "status-comments",
+      comments: [
+        {
+          id: "comment-1",
+          author: "Alice",
+          authorUrl: "https://www.douban.com/people/alice/",
+          authorAvatarUrl: null,
+          content: "\u8fd9\u662f\u4e00\u6761\u56de\u590d",
+          createdAt: "\u521a\u521a"
+        }
+      ]
+    });
+
+    renderPage([createTimelineItem({ id: "status-comments" })]);
+
+    const replyButton = await screen.findByRole("button", { name: "\u56de\u590d (1)" });
+    await user.click(replyButton);
+
+    expect(await screen.findByText("\u8fd9\u662f\u4e00\u6761\u56de\u590d")).toBeInTheDocument();
+    expect(api.getTimelineComments).toHaveBeenCalledWith("status-comments", "https://www.douban.com/people/ttop5/status/status-1/");
+
+    await user.click(replyButton);
+    await waitFor(() => {
+      expect(screen.queryByText("\u8fd9\u662f\u4e00\u6761\u56de\u590d")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows a readable loading label while timeline comments are fetching", async () => {
+    mockAuth();
+    const user = userEvent.setup();
+    const pendingComments: { resolve: ((value: TimelineCommentsResponse) => void) | null } = { resolve: null };
+    vi.spyOn(api, "getTimelineComments").mockImplementation(
+      () =>
+        new Promise<TimelineCommentsResponse>((resolve) => {
+          pendingComments.resolve = resolve;
+        })
+    );
+
+    renderPage([createTimelineItem({ id: "status-loading" })]);
+
+    await user.click(await screen.findByRole("button", { name: "\u56de\u590d (1)" }));
+    expect(await screen.findByText("\u6b63\u5728\u52a0\u8f7d\u56de\u590d")).toBeInTheDocument();
+
+    if (!pendingComments.resolve) {
+      throw new Error("expected comments request to start");
+    }
+    pendingComments.resolve({ statusId: "status-loading", comments: [] });
+    await waitFor(() => {
+      expect(screen.getByText("\u6682\u65e0\u53ef\u663e\u793a\u7684\u56de\u590d")).toBeInTheDocument();
+    });
+  });
+
   it("disables timeline actions when the page is showing stale cached data", async () => {
     mockAuth();
     renderPage([createTimelineItem()], { stale: true });
@@ -222,5 +338,183 @@ describe("TimelinePage", () => {
 
     const link = await screen.findByRole("link", { name: /\u5deb\u5e083\uff1a\u72c2\u730e/i });
     expect(link).toHaveAttribute("href", "/subject/game/30347464");
+  });
+
+  it("keeps loaded items visible and stops auto loading after a later page fails", async () => {
+    mockAuth();
+    MockIntersectionObserver.instances = [];
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver as unknown as typeof IntersectionObserver);
+
+    const page1 = {
+      scope: "following",
+      start: 0,
+      nextStart: 20,
+      hasMore: true,
+      fetchedAt: new Date().toISOString(),
+      stale: false,
+      items: [createTimelineItem({ id: "status-page-1", subjectTitle: "第一页条目", content: "8.8 第一页内容" })]
+    } satisfies TimelineResponse;
+    const page2 = {
+      scope: "following",
+      start: 20,
+      nextStart: 40,
+      hasMore: true,
+      fetchedAt: new Date().toISOString(),
+      stale: false,
+      items: [createTimelineItem({ id: "status-page-2", subjectTitle: "第二页条目", content: "8.6 第二页内容" })]
+    } satisfies TimelineResponse;
+    const page3Error = new ApiError("Douban session is blocked by login redirect or security challenge.", 401);
+
+    const getTimelineSpy = vi.spyOn(api, "getTimeline").mockImplementation(async (_scope, start = 0) => {
+      if (start === 0) {
+        return page1;
+      }
+      if (start === 20) {
+        return page2;
+      }
+      if (start === 40) {
+        throw page3Error;
+      }
+      throw new Error(`unexpected start ${start}`);
+    });
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: "status-page-1",
+      comments: []
+    });
+
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter>
+          <TimelinePage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("第一页条目")).toBeInTheDocument();
+    expect(screen.queryByText("动态暂时不可用")).not.toBeInTheDocument();
+
+    triggerAutoLoad();
+    expect(await screen.findByText("第二页条目")).toBeInTheDocument();
+
+    triggerAutoLoad();
+    expect(await screen.findByText("加载更多动态失败")).toBeInTheDocument();
+    expect(screen.getByText("Douban session is blocked by login redirect or security challenge.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试加载" })).toBeInTheDocument();
+    expect(screen.getByText("第一页条目")).toBeInTheDocument();
+    expect(screen.getByText("第二页条目")).toBeInTheDocument();
+    expect(screen.queryByText("动态暂时不可用")).not.toBeInTheDocument();
+    expect(document.querySelector(".auto-load-sentinel")).toBeNull();
+    expect(getTimelineSpy).toHaveBeenCalledTimes(4);
+    expect(getTimelineSpy.mock.calls.map(([, start]) => start ?? 0)).toEqual([0, 20, 40, 40]);
+  });
+
+  it("stops auto loading when the next page is empty even if the previous response advertised more", async () => {
+    mockAuth();
+    MockIntersectionObserver.instances = [];
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver as unknown as typeof IntersectionObserver);
+
+    const getTimelineSpy = vi.spyOn(api, "getTimeline").mockImplementation(async (_scope, start = 0) => {
+      if (start === 0) {
+        return {
+          scope: "following",
+          start: 0,
+          nextStart: 20,
+          hasMore: true,
+          fetchedAt: new Date().toISOString(),
+          stale: false,
+          items: [createTimelineItem({ id: "status-page-1", subjectTitle: "第一页条目", content: "8.8 第一页内容" })]
+        } satisfies TimelineResponse;
+      }
+      if (start === 20) {
+        return {
+          scope: "following",
+          start: 20,
+          nextStart: null,
+          hasMore: false,
+          fetchedAt: new Date().toISOString(),
+          stale: false,
+          items: []
+        } satisfies TimelineResponse;
+      }
+      throw new Error(`unexpected start ${start}`);
+    });
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: "status-page-1",
+      comments: []
+    });
+
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter>
+          <TimelinePage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("第一页条目")).toBeInTheDocument();
+    triggerAutoLoad();
+
+    await waitFor(() => {
+      expect(screen.getByText("没有更多动态了。")).toBeInTheDocument();
+    });
+    expect(document.querySelector(".auto-load-sentinel")).toBeNull();
+    expect(screen.queryByText("加载更多动态失败")).not.toBeInTheDocument();
+    expect(getTimelineSpy.mock.calls.map(([, start]) => start ?? 0)).toEqual([0, 20]);
+  });
+
+  it("shows a limited-state warning instead of no-more when follow feed pagination truncates upstream", async () => {
+    mockAuth();
+    MockIntersectionObserver.instances = [];
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver as unknown as typeof IntersectionObserver);
+
+    const getTimelineSpy = vi.spyOn(api, "getTimeline").mockImplementation(async (_scope, start = 0) => {
+      if (start === 0) {
+        return {
+          scope: "following",
+          start: 0,
+          nextStart: 20,
+          hasMore: true,
+          fetchedAt: new Date().toISOString(),
+          stale: false,
+          items: [createTimelineItem({ id: "status-page-1", subjectTitle: "第一页条目", content: "8.8 第一页内容" })]
+        } satisfies TimelineResponse;
+      }
+      if (start === 20) {
+        return {
+          scope: "following",
+          start: 20,
+          nextStart: null,
+          hasMore: false,
+          truncated: true,
+          fetchedAt: new Date().toISOString(),
+          stale: false,
+          items: []
+        } satisfies TimelineResponse;
+      }
+      throw new Error(`unexpected start ${start}`);
+    });
+    vi.spyOn(api, "getTimelineComments").mockResolvedValue({
+      statusId: "status-page-1",
+      comments: []
+    });
+
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter>
+          <TimelinePage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("第一页条目")).toBeInTheDocument();
+    triggerAutoLoad();
+
+    await waitFor(() => {
+      expect(screen.getByText("加载更多动态受限")).toBeInTheDocument();
+    });
+    expect(screen.getByText("请到设置页重新登录豆瓣后再试一次。")).toBeInTheDocument();
+    expect(screen.queryByText("没有更多动态了。")).not.toBeInTheDocument();
+    expect(document.querySelector(".auto-load-sentinel")).toBeNull();
+    expect(getTimelineSpy.mock.calls.map(([, start]) => start ?? 0)).toEqual([0, 20]);
   });
 });

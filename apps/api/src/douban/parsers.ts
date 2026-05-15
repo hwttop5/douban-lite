@@ -1,16 +1,18 @@
 import * as cheerio from "cheerio";
-import type {
-  Medium,
-  RankingBoardConfig,
-  RankingItem,
-  ShelfStatus,
-  SubjectComment,
-  SubjectMediaGroup,
-  SubjectRecord,
-  SubjectSectionLink,
-  SubjectStaffMember,
-  TimelineEngagement,
-  TimelineItem
+import {
+  type Medium,
+  type RankingBoardConfig,
+  type RankingItem,
+  type ShelfStatus,
+  type SubjectComment,
+  type SubjectMediaGroup,
+  type SubjectRecord,
+  type SubjectSectionLink,
+  type SubjectStaffMember,
+  type TimelineComment,
+  type TimelineEngagement,
+  type TimelineItem,
+  timelinePageSize
 } from "../../../../packages/shared/src";
 
 export class DoubanSessionError extends Error {
@@ -24,6 +26,13 @@ export interface ParsedUserCollection {
   items: Array<{ subject: SubjectRecord; status: ShelfStatus; rating: number | null; comment: string | null }>;
   hasNext: boolean;
   nextPage: number | null;
+  total: number | null;
+}
+
+export interface ParsedProfileCollectionTotal {
+  medium: Medium;
+  status: ShelfStatus;
+  count: number;
 }
 
 export interface ParsedInterestForm {
@@ -57,6 +66,26 @@ export interface ParsedTimelineActionContext {
   unlikeForm: ParsedTimelineActionForm | null;
   replyForm: ParsedTimelineActionForm | null;
   repostForm: ParsedTimelineActionForm | null;
+}
+
+export interface ParsedTimelineStatusTarget {
+  statusId: string;
+  detailUrl: string | null;
+}
+
+export interface ParsedTimelineCommentsConfig {
+  apiBaseUrl: string;
+  statusId: string;
+  canAddComment: boolean;
+  usesCustomApi: boolean;
+}
+
+export interface ParsedTimelinePage {
+  items: TimelineItem[];
+  nextStart: number | null;
+  hasMore: boolean;
+  upstreamNextStart: number | null;
+  upstreamHasMore: boolean;
 }
 
 export function ensureNoAccessChallenge(html: string, finalUrl: string) {
@@ -149,15 +178,30 @@ function absoluteUrl(baseUrl: string, maybeRelative: string | undefined | null) 
   }
 }
 
+function ratingClassToScore(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const rawScore = value.match(/(?:allstar|rating)(\d{1,2})(?:-t)?/i)?.[1];
+  if (!rawScore) {
+    return null;
+  }
+  const numericScore = Number(rawScore);
+  if (!Number.isFinite(numericScore) || numericScore <= 0) {
+    return null;
+  }
+  const normalizedScore = numericScore > 5 ? numericScore / 10 : numericScore;
+  return Number.isFinite(normalizedScore) ? Math.max(1, Math.min(5, Math.round(normalizedScore))) : null;
+}
+
 function ratingClassToLabel(value: string | null) {
   if (!value) {
     return null;
   }
-  const className = value.match(/allstar(\d+)/)?.[1];
-  if (!className) {
+  const score = ratingClassToScore(value);
+  if (score == null) {
     return null;
   }
-  const score = Number(className) / 10;
   if (score >= 5) {
     return "力荐";
   }
@@ -295,6 +339,23 @@ function ratingFromRoot(root: cheerio.Cheerio<any>) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function parseCollectionRating($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>) {
+  const directRating = Number(root.attr("data-rating") ?? root.find("[data-rating]").first().attr("data-rating"));
+  if (Number.isFinite(directRating) && directRating > 0) {
+    return Math.max(1, Math.min(5, Math.round(directRating)));
+  }
+
+  const classCandidates = [root.attr("class") ?? null, ...root.find("[class]").toArray().map((element) => $(element).attr("class") ?? null)];
+  for (const candidate of classCandidates) {
+    const score = ratingClassToScore(candidate);
+    if (score != null) {
+      return score;
+    }
+  }
+
+  return null;
+}
+
 function imageFromRoot(root: cheerio.Cheerio<any>) {
   const imageSource = root.find("img").first().attr("src");
   if (imageSource) {
@@ -306,6 +367,63 @@ function imageFromRoot(root: cheerio.Cheerio<any>) {
 
 function imageFromStyle(value: string | undefined | null) {
   return value?.match(/url\(['"]?([^'")]+)['"]?\)/)?.[1] ?? null;
+}
+
+function parseInfoBlockMetadata($: cheerio.CheerioAPI) {
+  const source = $("#info").first();
+  if (source.length === 0) {
+    return {} as Record<string, string>;
+  }
+  const clone = source.clone();
+  clone.find("a").each((_, element) => {
+    const link = $(element);
+    link.replaceWith(link.text());
+  });
+  clone.find("script, style").remove();
+  clone.find("br").replaceWith("\n");
+  const metadata: Record<string, string> = {};
+  clone
+    .text()
+    .split(/\n+/)
+    .map((line) => safeText(line))
+    .forEach((line) => {
+      if (!line) {
+        return;
+      }
+      const match = line.match(/^([^:：]{1,24})[:：]\s*(.+)$/);
+      if (!match) {
+        return;
+      }
+      const label = safeText(match[1]);
+      const value = safeText(match[2]);
+      if (label && value && !metadata[label]) {
+        metadata[label] = value;
+      }
+    });
+  return metadata;
+}
+
+function metadataTextValue(metadata: Record<string, string | string[]>, key: string) {
+  const value = metadata[key];
+  if (Array.isArray(value)) {
+    return value.join(" / ");
+  }
+  return typeof value === "string" ? value : null;
+}
+
+function parseDetailCreators(medium: Medium, metadata: Record<string, string | string[]>, explicitCreators: string | null) {
+  if (explicitCreators) {
+    return parseCreators(explicitCreators);
+  }
+  const candidates =
+    medium === "movie"
+      ? [metadataTextValue(metadata, "导演"), metadataTextValue(metadata, "主演")]
+      : medium === "book"
+        ? [metadataTextValue(metadata, "作者")]
+        : medium === "music"
+          ? [metadataTextValue(metadata, "表演者")]
+          : [metadataTextValue(metadata, "开发商"), metadataTextValue(metadata, "发行商")];
+  return parseCreators(candidates.filter((value): value is string => Boolean(value)).join(" / "));
 }
 
 function subjectFromRoot($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>, baseUrl: string, medium: Medium) {
@@ -907,15 +1025,17 @@ export function parseSubjectDetail(html: string, baseUrl: string, medium: Medium
     throw new Error("Unable to parse subject detail.");
   }
 
-  const metadata: Record<string, string | string[]> = {};
-  $("#info span.pl, .subject-meta dt, .item-subject-info dt, .meta-row .label").each((_, element) => {
+  const metadata: Record<string, string | string[]> = parseInfoBlockMetadata($);
+  $(".subject-meta dt, .item-subject-info dt, .meta-row .label").each((_, element) => {
     const row = $(element);
     const label = safeText(row.text())?.replace(/[:：]$/, "");
-    const value = safeText(row.next("span, dd, .value").text()) ?? safeText(row.parent().text()?.replace(row.text(), ""));
+    const value = safeText(row.next("span, dd, .value").first().text());
     if (label && value) {
       metadata[label] = value;
     }
   });
+
+  const explicitCreators = safeText($(".creators, .subject-creators").first().text());
 
   return createSubject(baseUrl, medium, {
     doubanId,
@@ -925,7 +1045,7 @@ export function parseSubjectDetail(html: string, baseUrl: string, medium: Medium
     coverUrl: $("img.cover, .cover img, .poster img, #mainpic img, .nbg img, .item-pic img").first().attr("src"),
     averageRating: ratingFromRoot($("body")),
     summary: cleanSubjectSummary($),
-    creators: parseCreators(safeText($(".creators, .subject-creators, #info").first().text())),
+    creators: parseDetailCreators(medium, metadata, explicitCreators),
     metadata
   });
 }
@@ -972,6 +1092,7 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
       authorUrl: absoluteUrl("https://www.douban.com", authorLink.attr("href")),
       authorAvatarUrl: null,
       userVoteState: /cancel_vote/.test(diggLink.attr("href") ?? "") ? "voted" : diggLink.length > 0 ? "not_voted" : /已投票/.test(voteStateText) ? "voted" : "not_voted",
+      canCancelVote: /cancel_vote/.test(diggLink.attr("href") ?? "") ? true : null,
       content,
       rating:
         safeText(root.find(".rating, .user-stars").first().attr("title") ?? null) ??
@@ -981,6 +1102,55 @@ export function parseSubjectComments(html: string, limit = 5): SubjectComment[] 
       votes: Number(root.find(".vote-count, .votes, .digg span").first().text()) || null
     });
   });
+  return comments.slice(0, limit);
+}
+
+export function parseTimelineComments(html: string, baseUrl: string, limit = 20): TimelineComment[] {
+  const $ = cheerio.load(html);
+  const comments: TimelineComment[] = [];
+  const seen = new Set<string>();
+  const roots = $(
+    [
+      "#comments .comment-item",
+      ".comments-items .comment-item",
+      ".comment-list .comment-item",
+      ".status-comments .comment-item",
+      ".reply-item",
+      "[data-cid].comment-item"
+    ].join(", ")
+  );
+
+  roots.each((_, element) => {
+    const root = $(element);
+    const id = root.attr("data-cid") ?? root.attr("id") ?? null;
+    const authorLink = root.find(".author a, .comment-info a, .user-info a, a[href*='/people/']").first();
+    const avatar = root.find(".author img, .comment-info img, .user-info img, a[href*='/people/'] img, img.avatar").first().attr("src");
+    const content = safeText(
+      root
+        .find(".comment-content .short, .comment-content, .reply-content, .content, p .short, p")
+        .first()
+        .text()
+    );
+    if (!content) {
+      return;
+    }
+    const key = id ?? `${safeText(authorLink.text()) ?? ""}:${content}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    comments.push({
+      id,
+      author: safeText(authorLink.text()),
+      authorUrl: absoluteUrl(baseUrl, authorLink.attr("href")),
+      authorAvatarUrl: absoluteUrl(baseUrl, avatar),
+      content,
+      createdAt:
+        safeText(root.find(".pubtime, .comment-time, time, .created-at").first().attr("datetime")) ??
+        safeText(root.find(".pubtime, .comment-time, time, .created-at").first().text())
+    });
+  });
+
   return comments.slice(0, limit);
 }
 
@@ -1018,18 +1188,115 @@ export function parseSubjectCommentVoteAction(html: string, commentId: string, p
   }
 
   const legacyVoteLink = root.find(".comment-vote .vote-comment").first();
+  const legacyVoteContainer = root.find(".comment-vote").first();
   const legacyVoteTemplate = extractSubjectCommentVoteApiTemplate(html);
   const legacyVoteTarget = absoluteUrl(pageUrl, legacyVoteTemplate?.replace(":id", legacyVoteLink.attr("data-cid") ?? commentId) ?? null);
   if (!legacyVoteTarget) {
     return null;
   }
-  const userVoteState = legacyVoteLink.length > 0 ? "not_voted" : /已投票/.test(root.find(".comment-vote").first().text()) ? "voted" : "not_voted";
+  const userVoteState = legacyVoteLink.length > 0 ? "not_voted" : legacyVoteContainer.length > 0 ? "voted" : "not_voted";
   return {
     voteUrl: legacyVoteTarget,
     cancelVoteUrl: null,
     userVoteState,
     votes: currentVotes
   };
+}
+
+export function parseProfileCollectionTotals(html: string) {
+  const $ = cheerio.load(html);
+  const totals = new Map<string, ParsedProfileCollectionTotal>();
+
+  const addTotal = (medium: Medium, status: ShelfStatus, count: number) => {
+    totals.set(`${medium}:${status}`, { medium, status, count });
+  };
+
+  const readCount = (text: string, patterns: RegExp[]) => {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      const rawCount = match?.[1] ?? match?.[2];
+      if (rawCount) {
+        return Number(rawCount);
+      }
+    }
+    return null;
+  };
+
+  const mediumConfigs: Array<{ medium: Medium; containerSelectors: string[]; patterns: Array<{ status: ShelfStatus; regexes: RegExp[] }> }> = [
+    {
+      medium: "movie",
+      containerSelectors: ["#movie", ".user-intro", "body"],
+      patterns: [
+        { status: "doing", regexes: [/(\d+)\s*(?:部)?在看/] },
+        { status: "wish", regexes: [/(\d+)\s*(?:部)?想看/] },
+        { status: "done", regexes: [/(\d+)\s*(?:部)?看过/] }
+      ]
+    },
+    {
+      medium: "book",
+      containerSelectors: ["#book", ".user-intro", "body"],
+      patterns: [
+        { status: "doing", regexes: [/(\d+)\s*(?:本)?在读/] },
+        { status: "wish", regexes: [/(\d+)\s*(?:本)?想读/] },
+        { status: "done", regexes: [/(\d+)\s*(?:本)?读过/] }
+      ]
+    },
+    {
+      medium: "music",
+      containerSelectors: ["#music", ".user-intro", "body"],
+      patterns: [
+        { status: "doing", regexes: [/(\d+)\s*(?:张)?在听/] },
+        { status: "wish", regexes: [/(\d+)\s*(?:张)?想听/] },
+        { status: "done", regexes: [/(\d+)\s*(?:张)?听过/] }
+      ]
+    },
+    {
+      medium: "game",
+      containerSelectors: ["#game", ".game", ".user-intro", "body"],
+      patterns: [
+        { status: "doing", regexes: [/在玩\s*(\d+)/, /(\d+)\s*在玩/] },
+        { status: "wish", regexes: [/想玩\s*(\d+)/, /(\d+)\s*想玩/] },
+        { status: "done", regexes: [/玩过\s*(\d+)/, /(\d+)\s*玩过/] }
+      ]
+    }
+  ];
+
+  for (const config of mediumConfigs) {
+    const text = config.containerSelectors
+      .map((selector) => safeText($(selector).first().text()))
+      .find((value) => Boolean(value))
+      ?? safeText($("body").text())
+      ?? "";
+
+    for (const pattern of config.patterns) {
+      const count = readCount(text, pattern.regexes);
+      if (count == null) {
+        continue;
+      }
+      addTotal(config.medium, pattern.status, count);
+    }
+  }
+
+  return Array.from(totals.values());
+}
+
+export function inferSubjectCommentCancelVoteUrl(voteUrl: string, commentId: string) {
+  try {
+    const resolved = new URL(voteUrl);
+    if (/\/j\/comment\/vote\/?$/.test(resolved.pathname)) {
+      resolved.pathname = `/j/comment/${encodeURIComponent(commentId)}/cancel_vote`;
+      resolved.search = "";
+      return resolved.toString();
+    }
+    if (/\/j\/comment\/[^/]+\/vote\/?$/.test(resolved.pathname)) {
+      resolved.pathname = resolved.pathname.replace(/\/vote\/?$/, "/cancel_vote");
+      resolved.search = "";
+      return resolved.toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 export function parseRanking(html: string, baseUrl: string, medium: Medium, board: RankingBoardConfig): RankingItem[] {
@@ -1171,7 +1438,7 @@ export function parseUserCollection(html: string, baseUrl: string, medium: Mediu
     }
     const nextItem = {
       status: fromDoubanStatus(root.attr("data-status") ?? undefined, fallbackStatus),
-      rating: ratingFromRoot(root),
+      rating: parseCollectionRating($, root),
       comment: extractCollectionComment($, root),
       subject
     };
@@ -1199,7 +1466,7 @@ export function parseUserCollection(html: string, baseUrl: string, medium: Mediu
     });
   });
 
-  const nextHref = $("a.next, [data-next-page]").first().attr("href");
+  const nextHref = $("a.next, link[rel='next'], [data-next-page]").first().attr("href");
   const nextPageValue = $("a.next").first().attr("data-next-page") ?? $("body").attr("data-next-page");
   let nextPage: number | null = null;
   if (nextPageValue) {
@@ -1215,10 +1482,19 @@ export function parseUserCollection(html: string, baseUrl: string, medium: Mediu
     }
   }
 
+  const bodyText = safeText($("body").text()) ?? "";
+  const titleText = safeText($("title").text()) ?? "";
+  const totalMatch =
+    titleText.match(/\((\d+)\)\s*$/) ??
+    bodyText.match(/共\s*(\d+)\s*(?:项|条|个|部|本|张)/) ??
+    bodyText.match(/(\d+)\s*(?:部|本|张)\s*(?:想看|在看|看过|想读|在读|读过|想听|在听|听过|想玩|在玩|玩过)/);
+  const total = totalMatch?.[1] ? Number(totalMatch[1]) : null;
+
   return {
     items: Array.from(items.values()),
     hasNext: Number.isFinite(nextPage) && Number(nextPage) > 0,
-    nextPage: Number.isFinite(nextPage) ? Number(nextPage) : null
+    nextPage: Number.isFinite(nextPage) ? Number(nextPage) : null,
+    total
   };
 }
 
@@ -1553,25 +1829,37 @@ function parseTimelineReactActionForm(
 }
 
 function parseTimelineCommentsReplyForm(html: string, baseUrl: string, statusId: string): ParsedTimelineActionForm | null {
+  const config = parseTimelineCommentsConfig(html, baseUrl, statusId);
+  if (!config || !config.canAddComment) {
+    return null;
+  }
+  return {
+    actionUrl: new URL(`${config.apiBaseUrl.replace(/\/$/, "")}/${encodeURIComponent(config.statusId)}/add_comment`, baseUrl).toString(),
+    method: "POST",
+    defaultFields: {
+      resp_type: "c_dict",
+      ...(config.usesCustomApi ? { sync_to_status: "" } : { sync_to_mb: "" })
+    },
+    textFieldName: config.usesCustomApi ? "text" : "rv_comment",
+    includeStatusFields: false
+  };
+}
+
+export function parseTimelineCommentsConfig(html: string, baseUrl: string, expectedStatusId?: string): ParsedTimelineCommentsConfig | null {
   const config = html.match(/_COMMENTS_CONFIG\s*=\s*\{[\s\S]*?\};/)?.[0];
   if (!config) {
     return null;
   }
   const api = config.match(/['"]api['"]\s*:\s*['"]([^'"]+)['"]/)?.[1] ?? "/j/status";
-  const target = config.match(/['"]target['"]\s*:\s*\{[\s\S]*?['"]id['"]\s*:\s*['"]([^'"]+)['"]/)?.[1];
-  if (target !== statusId || /['"]can_add_comment['"]\s*:\s*false/.test(config)) {
+  const statusId = config.match(/['"]target['"]\s*:\s*\{[\s\S]*?['"]id['"]\s*:\s*['"]([^'"]+)['"]/)?.[1] ?? null;
+  if (!statusId || (expectedStatusId && statusId !== expectedStatusId)) {
     return null;
   }
-  const usesCustomApi = /useCustomApi['"]?\s*:\s*true/.test(config);
   return {
-    actionUrl: new URL(`${api.replace(/\/$/, "")}/${encodeURIComponent(target)}/add_comment`, baseUrl).toString(),
-    method: "POST",
-    defaultFields: {
-      resp_type: "c_dict",
-      ...(usesCustomApi ? { sync_to_status: "" } : { sync_to_mb: "" })
-    },
-    textFieldName: usesCustomApi ? "text" : "rv_comment",
-    includeStatusFields: false
+    apiBaseUrl: new URL(api, baseUrl).toString(),
+    statusId,
+    canAddComment: !/['"]can_add_comment['"]\s*:\s*false/.test(config),
+    usesCustomApi: /useCustomApi['"]?\s*:\s*true/.test(config)
   };
 }
 
@@ -1801,6 +2089,31 @@ function parseTimelinePhotos($: cheerio.CheerioAPI, wrapper: cheerio.Cheerio<any
   return photos;
 }
 
+function parseTimelineStatusTarget($: cheerio.CheerioAPI, wrapper: cheerio.Cheerio<any>, fallbackStatusId: string, baseUrl: string): ParsedTimelineStatusTarget {
+  const realWrapper = wrapper.find(".status-real-wrapper[data-sid], .status-real-wrapper .status-item[data-sid]").first();
+  const targetRoot = realWrapper.length > 0 ? realWrapper : wrapper;
+  const statusNode =
+    targetRoot.is(".status-item[data-sid], .status-real-wrapper[data-sid]")
+      ? targetRoot
+      : targetRoot.find(".status-item[data-sid], .status-real-wrapper[data-sid]").first();
+  const statusId = statusNode.attr("data-sid") ?? fallbackStatusId;
+  const detailLink =
+    targetRoot.find(`a[href*='/status/${statusId}']`).first().length > 0
+      ? targetRoot.find(`a[href*='/status/${statusId}']`).first()
+      : targetRoot.find("[data-status-url]").first().length > 0
+        ? targetRoot.find("[data-status-url]").first()
+        : wrapper.find(`a[href*='/status/${statusId}']`).first();
+  const detailUrl =
+    absoluteUrl(baseUrl, detailLink.attr("href")) ??
+    absoluteUrl(baseUrl, detailLink.attr("data-status-url")) ??
+    absoluteUrl(baseUrl, targetRoot.attr("data-status-url")) ??
+    absoluteUrl(baseUrl, statusNode.attr("data-status-url"));
+  return {
+    statusId,
+    detailUrl
+  };
+}
+
 export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
   const $ = cheerio.load(html);
   const items: TimelineItem[] = [];
@@ -1815,12 +2128,12 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
       return;
     }
     seen.add(id);
+    const statusTarget = parseTimelineStatusTarget($, wrapper, id, baseUrl);
 
     const peopleLink =
       wrapper.find(".lnk-people[href*='/people/']").first().length > 0
         ? wrapper.find(".lnk-people[href*='/people/']").first()
         : wrapper.find("a[href*='/people/']").filter((_, link) => safeText($(link).text()) != null).first();
-    const detailLink = wrapper.find(`a[href*='/status/${id}']`).first();
     const subjectRoot =
       wrapper.find(".block-subject").first().length > 0
         ? wrapper.find(".block-subject").first()
@@ -1844,7 +2157,10 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
         safeText(subjectLink.text()) ??
         safeText(subjectImage?.attr("alt"))
       : null;
-    const createdAtText = safeText(detailLink.text()) ?? safeText(wrapper.find(".created_at, .status-time, .pubtime").first().text());
+    const createdAtText =
+      safeText(wrapper.find(`a[href*='/status/${statusTarget.statusId}']`).first().text()) ??
+      safeText(wrapper.find(".status-real-wrapper .created_at, .status-real-wrapper .status-time, .status-real-wrapper .pubtime").first().text()) ??
+      safeText(wrapper.find(".created_at, .status-time, .pubtime").first().text());
     const actionText =
       cleanTimelineContent(safeText(wrapper.find(".hd .text").first().text()) ?? "", [authorName]) ||
       safeText(wrapper.find(".status-saying, .status-header").first().text()) ||
@@ -1862,7 +2178,7 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
     const authorAvatarUrl = authorImage.attr("src") ? new URL(authorImage.attr("src")!, baseUrl).toString() : null;
     const subjectCoverUrl = hasSubject && subjectImage?.attr("src") ? new URL(subjectImage.attr("src")!, baseUrl).toString() : null;
     const photoUrls = parseTimelinePhotos($, wrapper, baseUrl, [authorAvatarUrl ?? "", subjectCoverUrl ?? ""]);
-    const detailUrl = absoluteUrl(baseUrl, detailLink.attr("href"));
+    const detailUrl = statusTarget.detailUrl;
     const parsedAvailableActions = parseTimelineAvailableActions($, wrapper);
     const defaultAvailableActions = detailUrl
       ? {
@@ -1899,5 +2215,62 @@ export function parseTimeline(html: string, baseUrl: string): TimelineItem[] {
     });
   });
 
-  return items.slice(0, 30);
+  return items.slice(0, timelinePageSize);
+}
+
+function parseTimelineNextStart(html: string, baseUrl: string) {
+  const $ = cheerio.load(html);
+  const nextLink =
+    $("a.next[href], a[rel='next'][href], link[rel='next'][href]").first().attr("href")
+    ?? $("a[href]").filter((_, element) => {
+      const current = $(element);
+      const className = current.attr("class") ?? "";
+      const rel = current.attr("rel") ?? "";
+      const dataPage = current.attr("data-page") ?? "";
+      const text = safeText(current.text()) ?? "";
+      return /\bnext\b/i.test(className) || /\bnext\b/i.test(rel) || dataPage === "next" || /后页|下一页|更多/.test(text);
+    }).first().attr("href");
+  if (!nextLink) {
+    return null;
+  }
+  try {
+    const nextUrl = new URL(nextLink, baseUrl);
+    const startParam = nextUrl.searchParams.get("start") ?? nextUrl.searchParams.get("offset");
+    if (startParam != null) {
+      const start = Number(startParam);
+      return Number.isInteger(start) && start >= 0 ? start : null;
+    }
+    const pageParam = nextUrl.searchParams.get("page") ?? nextUrl.searchParams.get("p");
+    if (pageParam != null) {
+      const page = Number(pageParam);
+      return Number.isInteger(page) && page > 0 ? (page - 1) * timelinePageSize : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function parseTimelinePage(html: string, baseUrl: string, currentStart = 0): ParsedTimelinePage {
+  const items = parseTimeline(html, baseUrl);
+  const parsedNextStart = parseTimelineNextStart(html, baseUrl);
+  if (items.length === 0) {
+    return {
+      items,
+      nextStart: null,
+      hasMore: false,
+      upstreamNextStart: parsedNextStart,
+      upstreamHasMore: parsedNextStart != null
+    };
+  }
+  const fallbackHasMore = items.length >= timelinePageSize;
+  const nextStart = parsedNextStart ?? (fallbackHasMore ? currentStart + timelinePageSize : null);
+  const hasMore = parsedNextStart != null || fallbackHasMore;
+  return {
+    items,
+    nextStart,
+    hasMore,
+    upstreamNextStart: nextStart,
+    upstreamHasMore: hasMore
+  };
 }

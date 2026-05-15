@@ -3,10 +3,30 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AuthMeResponse, OverviewResponse } from "../../../../packages/shared/src";
+import type { AuthMeResponse, LibraryResponse, OverviewResponse } from "../../../../packages/shared/src";
 import * as api from "../api";
 import { AppContextProvider } from "../app-context";
 import { MyPage } from "./my-page";
+
+function renderMyPage(initialEntries = ["/me"]) {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>
+          <Route
+            path="/me"
+            element={
+              <AppContextProvider>
+                <MyPage />
+              </AppContextProvider>
+            }
+          />
+          <Route path="/login" element={<div>登录页占位</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -14,7 +34,7 @@ afterEach(() => {
 });
 
 describe("MyPage", () => {
-  it("renders library items from overview and library queries", async () => {
+  it("renders the current medium total from overview and shows library items", async () => {
     vi.spyOn(api, "getAuthMe").mockResolvedValue({
       authenticated: true,
       user: {
@@ -38,7 +58,11 @@ describe("MyPage", () => {
     } satisfies AuthMeResponse);
 
     vi.spyOn(api, "getOverview").mockResolvedValue({
-      totals: [{ medium: "movie", status: "wish", count: 1 }],
+      totals: [
+        { medium: "movie", status: "wish", count: 20 },
+        { medium: "movie", status: "doing", count: 5 },
+        { medium: "movie", status: "done", count: 8 }
+      ],
       recentItems: [],
       lastSyncJob: null,
       sessionStatus: {
@@ -87,19 +111,139 @@ describe("MyPage", () => {
         total: 1,
         hasMore: false
       }
-    });
+    } satisfies LibraryResponse);
 
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <AppContextProvider>
-            <MyPage />
-          </AppContextProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderMyPage();
 
     expect(await screen.findByText("肖申克的救赎")).toBeInTheDocument();
+    expect(screen.getByText("33")).toBeInTheDocument();
+  });
+
+  it("loads more items for the selected shelf", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "getAuthMe").mockResolvedValue({
+      authenticated: true,
+      user: {
+        id: "user-1",
+        peopleId: "demo-user",
+        displayName: "Demo",
+        avatarUrl: null,
+        ipLocation: "Shanghai",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      sessionStatus: {
+        status: "valid",
+        peopleId: "demo-user",
+        displayName: "Demo",
+        avatarUrl: null,
+        ipLocation: "Shanghai",
+        lastCheckedAt: null,
+        lastError: null
+      }
+    } satisfies AuthMeResponse);
+
+    vi.spyOn(api, "getOverview").mockResolvedValue({
+      totals: [{ medium: "movie", status: "wish", count: 2 }],
+      recentItems: [],
+      lastSyncJob: null,
+      sessionStatus: {
+        status: "valid",
+        peopleId: "demo-user",
+        displayName: "Demo",
+        avatarUrl: null,
+        lastCheckedAt: null,
+        lastError: null
+      }
+    } satisfies OverviewResponse);
+
+    const getLibrarySpy = vi.spyOn(api, "getLibrary")
+      .mockResolvedValueOnce({
+        items: [
+          {
+            medium: "movie",
+            doubanId: "1292052",
+            status: "wish",
+            rating: null,
+            comment: null,
+            tags: [],
+            syncToTimeline: true,
+            syncState: "synced",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+            lastSyncedAt: new Date().toISOString(),
+            lastPushedAt: null,
+            subject: {
+              medium: "movie",
+              doubanId: "1292052",
+              title: "Movie One",
+              subtitle: null,
+              year: "1994",
+              coverUrl: null,
+              averageRating: 9.7,
+              summary: null,
+              creators: ["Creator One"],
+              metadata: {},
+              updatedAt: new Date().toISOString()
+            }
+          }
+        ],
+        pagination: {
+          page: 1,
+          pageSize: 1,
+          total: 2,
+          hasMore: true
+        }
+      } satisfies LibraryResponse)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            medium: "movie",
+            doubanId: "1291546",
+            status: "wish",
+            rating: null,
+            comment: null,
+            tags: [],
+            syncToTimeline: true,
+            syncState: "synced",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+            lastSyncedAt: new Date().toISOString(),
+            lastPushedAt: null,
+            subject: {
+              medium: "movie",
+              doubanId: "1291546",
+              title: "Movie Two",
+              subtitle: null,
+              year: "1993",
+              coverUrl: null,
+              averageRating: 9.6,
+              summary: null,
+              creators: ["Creator Two"],
+              metadata: {},
+              updatedAt: new Date().toISOString()
+            }
+          }
+        ],
+        pagination: {
+          page: 2,
+          pageSize: 1,
+          total: 2,
+          hasMore: false
+        }
+      } satisfies LibraryResponse);
+
+    renderMyPage();
+
+    expect(await screen.findByText("Movie One")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看更多" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "查看更多" }));
+
+    expect(await screen.findByText("Movie Two")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看更多" })).not.toBeInTheDocument();
+    expect(getLibrarySpy).toHaveBeenNthCalledWith(1, "movie", "wish", 1);
+    expect(getLibrarySpy).toHaveBeenNthCalledWith(2, "movie", "wish", 2);
   });
 
   it("shows the login prompt without requesting library data when the user is signed out", async () => {
@@ -131,6 +275,7 @@ describe("MyPage", () => {
         lastError: null
       }
     } satisfies OverviewResponse);
+
     const getLibrarySpy = vi.spyOn(api, "getLibrary").mockResolvedValue({
       items: [],
       pagination: {
@@ -139,30 +284,15 @@ describe("MyPage", () => {
         total: 0,
         hasMore: false
       }
-    });
+    } satisfies LibraryResponse);
 
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/me"]}>
-          <Routes>
-            <Route
-              path="/me"
-              element={
-                <AppContextProvider>
-                  <MyPage />
-                </AppContextProvider>
-              }
-            />
-            <Route path="/login" element={<div>登录页占位</div>} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderMyPage();
 
-    expect(await screen.findByRole("button", { name: "请登录" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "请先登录" })).toBeInTheDocument();
     const loginButton = screen.getByRole("button", { name: "去登录" });
     expect(loginButton).toBeInTheDocument();
     expect(screen.queryByText("正在整理资料")).not.toBeInTheDocument();
+
     await waitFor(() => {
       expect(getLibrarySpy).not.toHaveBeenCalled();
     });

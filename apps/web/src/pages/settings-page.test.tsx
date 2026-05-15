@@ -47,7 +47,8 @@ function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"])
   };
 }
 
-function renderSettingsPage(authMe: AuthMeResponse, initialEntry = "/settings") {
+function renderSettingsPage(authMe: AuthMeResponse, options: { initialEntry?: string; initialEntries?: string[]; initialIndex?: number } = {}) {
+  const { initialEntry = "/settings", initialEntries, initialIndex } = options;
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
   vi.spyOn(api, "logoutDoubanSession").mockResolvedValue({
     status: "missing"
@@ -75,11 +76,12 @@ function renderSettingsPage(authMe: AuthMeResponse, initialEntry = "/settings") 
 
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter initialEntries={initialEntries ?? [initialEntry]} initialIndex={initialIndex}>
         <AppContextProvider>
           <Routes>
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/login" element={<div>登录页</div>} />
+            <Route path="/me" element={<div>我的页</div>} />
           </Routes>
         </AppContextProvider>
       </MemoryRouter>
@@ -129,6 +131,29 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("登录页")).toBeInTheDocument();
+    });
+  });
+
+  it("returns to the previous page from the top-left back button", async () => {
+    renderSettingsPage(createAuthMeResponse("valid"), {
+      initialEntries: ["/me", "/settings"],
+      initialIndex: 1
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "返回" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("我的页")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to /me when opened directly and the back button has no in-app history", async () => {
+    renderSettingsPage(createAuthMeResponse("valid"));
+
+    fireEvent.click(await screen.findByRole("button", { name: "返回" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("我的页")).toBeInTheDocument();
     });
   });
 });

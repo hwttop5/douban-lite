@@ -35,6 +35,13 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const { showTimelineNav, setShowTimelineNav, showRankingsNav, setShowRankingsNav } = useAppContext();
+  const handleBack = () => {
+    if (location.key !== "default") {
+      navigate(-1);
+      return;
+    }
+    navigate("/me", { replace: true });
+  };
 
   const statusQuery = useQuery({
     queryKey: ["auth-me"],
@@ -86,7 +93,10 @@ export function SettingsPage() {
   if (statusQuery.isPending && !statusQuery.data) {
     return (
       <div className="page settings-page">
-        <section className="page-header">
+        <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
+          <span>‹</span>
+        </button>
+        <section className="page-header page-header--with-back-button">
           <p className="eyebrow">设置</p>
           <h1>偏好设置</h1>
           <p className="supporting">会话状态、菜单显示和同步任务分区管理。</p>
@@ -100,7 +110,10 @@ export function SettingsPage() {
 
   return (
     <div className="page settings-page">
-      <section className="page-header">
+      <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
+        <span>‹</span>
+      </button>
+      <section className="page-header page-header--with-back-button">
         <p className="eyebrow">设置</p>
         <h1>偏好设置</h1>
         <p className="supporting">会话状态、菜单显示和同步任务分区管理。</p>

@@ -2,7 +2,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import type { Medium, ShelfStatus } from "../../../packages/shared/src";
+import { type Medium, type ShelfStatus, timelinePageSize } from "../../../packages/shared/src";
 
 interface MockRemoteState {
   status: ShelfStatus;
@@ -41,6 +41,17 @@ interface MockTimelineState {
     like: number;
   };
   liked: boolean;
+  comments: Array<{
+    id: string;
+    author: string;
+    content: string;
+    createdAtText: string;
+  }>;
+}
+
+interface MockCommentVoteState {
+  votes: number;
+  userVoteState: "voted" | "not_voted";
 }
 
 const subjects: Record<Medium, MockSubject> = {
@@ -238,7 +249,56 @@ function renderInterestEditor(subject: MockSubject, state: MockRemoteState) {
   </form>`;
 }
 
-function renderComments(subject: MockSubject, start = 0, limit = 20) {
+function renderCommentVoteAction(commentId: string, state: MockCommentVoteState) {
+  if (commentId.startsWith("legacy-")) {
+    return `
+      <span class="comment-vote">
+        <span class="vote-count">${state.votes}</span>
+        ${state.userVoteState === "voted" ? "宸叉姇绁?" : `<a href="javascript:;" class="j vote-comment" data-cid="${commentId}">鏈夌敤</a>`}
+      </span>
+      <script>
+        SUBJECT_COMMENTS.createVoteHandler({
+          api: '/j/comment/:id/vote',
+          voteSelector: '.vote-comment',
+          textSelector: '.vote-count'
+        });
+      </script>`;
+  }
+  if (state.userVoteState === "voted") {
+    return `
+      <div class="digg">
+        <span class="vote-count">${state.votes}</span>
+        <a href="/j/comment/${commentId}/cancel_vote" data-href="/j/comment/${commentId}/vote">已投票</a>
+      </div>`;
+  }
+  return `
+    <div class="digg">
+      <span class="vote-count">${state.votes}</span>
+      <a href="/j/comment/${commentId}/vote" data-href="/j/comment/${commentId}/cancel_vote">有用</a>
+    </div>`;
+}
+
+function renderComments(
+  subject: MockSubject,
+  start = 0,
+  limit = 20,
+  focusCommentId?: string | null,
+  focusCommentVoteState?: MockCommentVoteState | null
+) {
+  if (focusCommentId) {
+    const state: MockCommentVoteState = focusCommentVoteState ?? { votes: 12, userVoteState: "not_voted" };
+    return `
+    <html><body>
+      <div class="comments">
+        <div class="comment-item" data-cid="${focusCommentId}">
+          <div class="comment-info"><a>测试用户</a><span class="comment-time">2026-05-10</span></div>
+          <p><span class="short">这是一条可投票短评。</span></p>
+          <span class="rating" title="推荐"></span>
+          ${renderCommentVoteAction(focusCommentId, state)}
+        </div>
+      </div>
+    </body></html>`;
+  }
   return `
   <html><body>
     <div class="comments">
@@ -272,11 +332,12 @@ function renderSearch(subject: MockSubject) {
 
 function renderLibrary(subject: MockSubject, status: ShelfStatus, state: MockRemoteState) {
   if (state.status !== status) {
-    return "<html><body></body></html>";
+    return `<html><body><title>demo${status}(0)</title></body></html>`;
   }
   const href = subject.medium === "game" ? `/game/${subject.doubanId}/` : `/${subject.medium}/subject/${subject.doubanId}`;
   return `
   <html><body>
+    <title>demo${status}(1)</title>
     <article class="collection-item" data-status="${interestValue(state.status)}">
       <a href="${href}"><img src="${subject.cover}" /></a>
       <h3>${subject.title}</h3>
@@ -290,10 +351,11 @@ function renderLibrary(subject: MockSubject, status: ShelfStatus, state: MockRem
 
 function renderGameLibrary(subject: MockSubject, status: ShelfStatus, state: MockRemoteState) {
   if (state.status !== status) {
-    return "<html><body></body></html>";
+    return `<html><body><title>demo${status}(0)</title></body></html>`;
   }
   return `
   <html><body>
+    <title>demo${status}(1)</title>
     <div class="interest-item">
       <a href="https://www.douban.com/game/${subject.doubanId}/"><img src="${subject.cover}" /></a>
       <div>
@@ -304,6 +366,37 @@ function renderGameLibrary(subject: MockSubject, status: ShelfStatus, state: Moc
       </div>
     </div>
   </body></html>`;
+}
+
+function renderProfileSummary(peopleId: string, states: Map<string, MockRemoteState>) {
+  const countBy = (medium: Medium, status: ShelfStatus) =>
+    Array.from(states.entries()).filter(([key, value]) => key.startsWith(`${medium}:`) && value.status === status).length;
+
+  return `
+    <html><body>
+      <div id="movie">
+        <a href="https://movie.douban.com/people/${peopleId}/do">${countBy("movie", "doing")}部在看</a>
+        <a href="https://movie.douban.com/people/${peopleId}/wish">${countBy("movie", "wish")}部想看</a>
+        <a href="https://movie.douban.com/people/${peopleId}/collect">${countBy("movie", "done")}部看过</a>
+      </div>
+      <div id="book">
+        <a href="https://book.douban.com/people/${peopleId}/do">${countBy("book", "doing")}本在读</a>
+        <a href="https://book.douban.com/people/${peopleId}/wish">${countBy("book", "wish")}本想读</a>
+        <a href="https://book.douban.com/people/${peopleId}/collect">${countBy("book", "done")}本读过</a>
+      </div>
+      <div id="music">
+        <a href="https://music.douban.com/people/${peopleId}/do">${countBy("music", "doing")}张在听</a>
+        <a href="https://music.douban.com/people/${peopleId}/wish">${countBy("music", "wish")}张想听</a>
+        <a href="https://music.douban.com/people/${peopleId}/collect">${countBy("music", "done")}张听过</a>
+      </div>
+      <div id="game">
+        <a href="/people/${peopleId}/games?action=do">在玩${countBy("game", "doing")}</a>
+        <a href="/people/${peopleId}/games?action=wish">想玩${countBy("game", "wish")}</a>
+        <a href="/people/${peopleId}/games?action=collect">玩过${countBy("game", "done")}</a>
+      </div>
+      <a href="/people/${peopleId}/">${peopleId}</a>
+    </body></html>
+  `;
 }
 
 function renderRanking(subject: MockSubject) {
@@ -357,7 +450,21 @@ function createTimelineState(scope: "following" | "mine", peopleId: string, numb
       repost: 1,
       like: 5
     },
-    liked: number % 2 === 0
+    liked: number % 2 === 0,
+    comments: [
+      {
+        id: `${scope}-${number}-comment-1`,
+        author: "评论者 A",
+        content: `这是第 ${number} 条动态的第一条回复`,
+        createdAtText: "刚刚"
+      },
+      {
+        id: `${scope}-${number}-comment-2`,
+        author: "评论者 B",
+        content: `这是第 ${number} 条动态的第二条回复`,
+        createdAtText: "1 分钟前"
+      }
+    ]
   };
 }
 
@@ -395,7 +502,8 @@ function ensureTimelineStateById(timelineStates: Map<string, MockTimelineState>,
     createdAtText: "05-05",
     subjectMedium: "book",
     engagements: { reply: 0, repost: 0, like: 0 },
-    liked: false
+    liked: false,
+    comments: []
   };
   timelineStates.set(statusId, created);
   return created;
@@ -430,9 +538,42 @@ function renderTimelineActions(status: MockTimelineState, detailMode = false) {
     </div>`;
 }
 
+function renderTimelineComments(status: MockTimelineState) {
+  return `
+    <div id="comments" class="comment-list">
+      ${status.comments
+        .map(
+          (comment) => `
+      <div class="comment-item" data-cid="${comment.id}">
+        <span class="comment-info">
+          <a href="/people/commenter/"><img src="/avatar.jpg" />${comment.author}</a>
+        </span>
+        <p class="comment-content">${comment.content}</p>
+        <span class="pubtime">${comment.createdAtText}</span>
+      </div>`
+        )
+        .join("")}
+    </div>`;
+}
+
 function renderTimelineStatus(status: MockTimelineState, detailMode = false) {
   const subject = subjects[status.subjectMedium];
   const subjectUrl = status.subjectMedium === "game" ? `/game/${subject.doubanId}/` : `/${status.subjectMedium}/subject/${subject.doubanId}/`;
+  const inlineCommentsPayload =
+    status.id === "following-1"
+      ? JSON.stringify(
+          status.comments.map((comment) => ({
+            id: comment.id,
+            text: comment.content,
+            create_time: comment.createdAtText,
+            author: {
+              name: comment.author,
+              url: "/people/commenter/",
+              avatar: "/avatar.jpg"
+            }
+          }))
+        )
+      : null;
   return `
     <div class="new-status status-wrapper" data-sid="${status.id}">
       <div class="status-item" data-sid="${status.id}" data-action="${status.actionText}">
@@ -445,10 +586,11 @@ function renderTimelineStatus(status: MockTimelineState, detailMode = false) {
       </div>
       ${
         detailMode
-          ? `<div id="comments" class="comment-list"></div>
+          ? `${status.id === "following-1" ? `<div id="comments" class="comment-list"></div>` : renderTimelineComments(status)}
         <script>
           var _COMMENTS_CONFIG = {
             'api': '/j/status',
+            ${inlineCommentsPayload ? `'comments': ${inlineCommentsPayload}, 'total': ${status.comments.length}, 'start': 0, 'count': 20,` : ""}
             'target': {"kind":3055,"id":"${status.id}","can_add_comment":true},
             'options': {'enable_comment_sync_to_status': true}
           };
@@ -458,14 +600,38 @@ function renderTimelineStatus(status: MockTimelineState, detailMode = false) {
     </div>`;
 }
 
-function renderTimeline(timelineStates: Map<string, MockTimelineState>, scope: "following" | "mine", peopleId = "demo-user", start = 0) {
-  const count = start === 0 ? 30 : 10;
+function renderTimelinePaginator(start: number, nextStart: number) {
+  const currentPage = Math.floor(start / timelinePageSize) + 1;
+  const nextPage = Math.floor(nextStart / timelinePageSize) + 1;
+  return `
+    <div class="paginator">
+      <span class="thispage">${currentPage}</span>
+      <span class="next">
+        <link rel="next" href="?p=${nextPage}" />
+        <a href="?p=${nextPage}">后页&gt;</a>
+      </span>
+    </div>`;
+}
+
+function renderTimeline(
+  timelineStates: Map<string, MockTimelineState>,
+  scope: "following" | "mine",
+  peopleId = "demo-user",
+  start = 0,
+  options?: {
+    gapStarts?: Set<number>;
+    nextStarts?: Map<number, number | null>;
+  }
+) {
+  const nextStart = options?.nextStarts?.get(start) ?? null;
+  const count = options?.gapStarts?.has(start) ? 0 : start === 0 ? timelinePageSize : 10;
   return `
   <html><body>
     ${Array.from({ length: count }, (_, index) => {
       const number = start + index + 1;
       return renderTimelineStatus(ensureTimelineState(timelineStates, scope, peopleId, number));
     }).join("")}
+    ${nextStart != null ? renderTimelinePaginator(start, nextStart) : ""}
   </body></html>`;
 }
 
@@ -480,10 +646,13 @@ export async function createMockDoubanServer() {
   const sentSmsCodes = new Map<string, string>();
   const qrStates = new Map<string, { status: "pending" | "scan" | "login" | "invalid" | "cancel"; polls: number }>();
   let timelineBlocked = false;
+  const timelineGapStarts = new Set<number>();
+  const timelineNextStarts = new Map<number, number | null>();
   const hasValidCsrf = (request: express.Request) =>
     String(request.headers["x-csrf-token"] ?? "") === String(request.body.ck ?? "");
 
   const states = new Map<string, MockRemoteState>();
+  const commentVoteStates = new Map<string, MockCommentVoteState>();
   (Object.values(subjects) as MockSubject[]).forEach((subject) => {
     states.set(`${subject.medium}:${subject.doubanId}`, {
       status: "wish",
@@ -494,13 +663,27 @@ export async function createMockDoubanServer() {
     });
   });
   const timelineStates = new Map<string, MockTimelineState>();
+  const ensureCommentVoteState = (commentId: string) => {
+    const existing = commentVoteStates.get(commentId);
+    if (existing) {
+      return existing;
+    }
+    const created: MockCommentVoteState = {
+      votes: 12,
+      userVoteState: "not_voted"
+    };
+    commentVoteStates.set(commentId, created);
+    return created;
+  };
 
   app.get("/", (request, response) => {
     if (timelineBlocked) {
       response.redirect("/misc/sorry");
       return;
     }
-    response.send(renderTimeline(timelineStates, "following", "demo-user", Number(request.query.start ?? 0)));
+    const page = Math.max(1, Number(request.query.p ?? 1));
+    const start = Number.isFinite(page) && page > 1 ? (page - 1) * timelinePageSize : 0;
+    response.send(renderTimeline(timelineStates, "following", "demo-user", start, { gapStarts: timelineGapStarts, nextStarts: timelineNextStarts }));
   });
 
   app.get("/misc/sorry", (_request, response) => {
@@ -640,7 +823,7 @@ export async function createMockDoubanServer() {
   });
 
   app.get("/people/:peopleId/", (request, response) => {
-    response.send(`<html><body><a href="/people/${request.params.peopleId}/">${request.params.peopleId}</a></body></html>`);
+    response.send(renderProfileSummary(request.params.peopleId, states));
   });
 
   app.get("/people/:peopleId/status/:statusId/", (request, response) => {
@@ -657,7 +840,9 @@ export async function createMockDoubanServer() {
       response.redirect("/misc/sorry");
       return;
     }
-    response.send(renderTimeline(timelineStates, "mine", request.params.peopleId, Number(request.query.start ?? 0)));
+    const page = Math.max(1, Number(request.query.p ?? 1));
+    const start = Number.isFinite(page) && page > 1 ? (page - 1) * timelinePageSize : 0;
+    response.send(renderTimeline(timelineStates, "mine", request.params.peopleId, start, { gapStarts: timelineGapStarts, nextStarts: timelineNextStarts }));
   });
 
   app.get("/images/:name", (_request, response) => {
@@ -712,6 +897,15 @@ export async function createMockDoubanServer() {
     response.send(renderLibrary(subject, status, state));
   });
 
+  app.get("/:medium/people/:peopleId/:status", (request, response) => {
+    const medium = request.params.medium as Medium;
+    const statusValue = String(request.params.status);
+    const status = statusValue === "collect" ? "done" : statusValue === "do" ? "doing" : "wish";
+    const subject = subjects[medium];
+    const state = states.get(`${medium}:${subject.doubanId}`)!;
+    response.send(renderLibrary(subject, status, state));
+  });
+
   app.get("/people/:peopleId/games", (request, response) => {
     const action = String(request.query.action ?? "wish");
     const status = action === "collect" ? "done" : action === "do" ? "doing" : "wish";
@@ -737,7 +931,8 @@ export async function createMockDoubanServer() {
   app.get("/:medium/subject/:doubanId/comments", (request, response) => {
     const medium = request.params.medium as Medium;
     const subject = subjects[medium];
-    response.send(renderComments(subject, Number(request.query.start ?? 0), Number(request.query.limit ?? 20)));
+    const focusCommentId = typeof request.query.comment_id === "string" ? request.query.comment_id : null;
+    response.send(renderComments(subject, Number(request.query.start ?? 0), Number(request.query.limit ?? 20), focusCommentId, focusCommentId ? ensureCommentVoteState(focusCommentId) : null));
   });
 
   app.get("/game/:doubanId/", (_request, response) => {
@@ -747,7 +942,34 @@ export async function createMockDoubanServer() {
   });
 
   app.get("/game/:doubanId/comments", (request, response) => {
-    response.send(renderComments(subjects.game, Number(request.query.start ?? 0), Number(request.query.limit ?? 20)));
+    const focusCommentId = typeof request.query.comment_id === "string" ? request.query.comment_id : null;
+    response.send(renderComments(subjects.game, Number(request.query.start ?? 0), Number(request.query.limit ?? 20), focusCommentId, focusCommentId ? ensureCommentVoteState(focusCommentId) : null));
+  });
+
+  app.post("/j/comment/:commentId/vote", (request, response) => {
+    const state = ensureCommentVoteState(request.params.commentId);
+    if (request.params.commentId.startsWith("legacy-")) {
+      if (state.userVoteState === "voted") {
+        state.userVoteState = "not_voted";
+        state.votes = Math.max(0, state.votes - 1);
+      } else {
+        state.userVoteState = "voted";
+        state.votes += 1;
+      }
+    } else if (state.userVoteState !== "voted") {
+      state.userVoteState = "voted";
+      state.votes += 1;
+    }
+    response.json({ r: 0, digg_n: state.votes, id: request.body.id ?? request.params.commentId });
+  });
+
+  app.post("/j/comment/:commentId/cancel_vote", (request, response) => {
+    const state = ensureCommentVoteState(request.params.commentId);
+    if (state.userVoteState === "voted") {
+      state.userVoteState = "not_voted";
+      state.votes = Math.max(0, state.votes - 1);
+    }
+    response.json({ r: 0, digg_n: state.votes, id: request.body.id ?? request.params.commentId });
   });
 
   app.post("/j/status/like", (request, response) => {
@@ -792,10 +1014,22 @@ export async function createMockDoubanServer() {
 
   app.post("/j/status/:statusId/add_comment", (request, response) => {
     const state = ensureTimelineStateById(timelineStates, "demo-user", request.params.statusId);
-    if (String(request.body.rv_comment ?? request.body.text ?? "").trim().length > 0) {
+    const text = String(request.body.rv_comment ?? request.body.text ?? "").trim();
+    if (text.length > 0) {
       state.engagements.reply += 1;
+      state.comments.unshift({
+        id: `${state.id}-comment-${state.engagements.reply}`,
+        author: "demo-user",
+        content: text,
+        createdAtText: "刚刚"
+      });
     }
-    response.json({ code: 0, data: { id: `comment-${state.engagements.reply}`, text: request.body.rv_comment ?? request.body.text ?? "" } });
+    response.json({ code: 0, data: { id: `comment-${state.engagements.reply}`, text } });
+  });
+
+  app.get("/j/status/:statusId/comments", (request, response) => {
+    const state = ensureTimelineStateById(timelineStates, "demo-user", request.params.statusId);
+    response.send(renderTimelineComments(state));
   });
 
   app.post("/j/status/repost", (request, response) => {
@@ -875,6 +1109,17 @@ export async function createMockDoubanServer() {
     },
     setTimelineBlocked(blocked: boolean) {
       timelineBlocked = blocked;
+    },
+    setTimelineGapStarts(starts: number[]) {
+      timelineGapStarts.clear();
+      starts.forEach((start) => timelineGapStarts.add(start));
+    },
+    setTimelineNextStart(start: number, nextStart: number | null) {
+      if (nextStart == null) {
+        timelineNextStarts.delete(start);
+        return;
+      }
+      timelineNextStarts.set(start, nextStart);
     },
     setQrState(code: string, status: "pending" | "scan" | "login" | "invalid" | "cancel") {
       const current = qrStates.get(code);

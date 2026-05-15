@@ -17,6 +17,7 @@ import type {
   SyncEventRecord,
   SyncJobRecord,
   TimelineActionResponse,
+  TimelineCommentsResponse,
   TimelineResponse,
   TimelineScope,
   UpdateLibraryStateInput
@@ -125,6 +126,13 @@ export function getTimeline(scope: TimelineScope, start = 0) {
     start: String(start)
   });
   return request<TimelineResponse>(`/api/timeline?${params.toString()}`);
+}
+
+export function getTimelineComments(statusId: string, detailUrl: string) {
+  return request<TimelineCommentsResponse>(`/api/timeline/${statusId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ detailUrl })
+  });
 }
 
 export function likeTimelineStatus(statusId: string, detailUrl: string) {

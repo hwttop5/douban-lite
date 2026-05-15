@@ -47,12 +47,92 @@ describe("API integration", () => {
     const overview = await agent.get("/api/me/overview").expect(200);
     expect(overview.body.sessionStatus.status).toBe("valid");
     expect(overview.body.totals.length).toBeGreaterThan(0);
+    expect(overview.body.totals.find((item: { medium: string; status: string; count: number }) => item.medium === "movie" && item.status === "wish")?.count).toBe(1);
 
     const movieLibrary = await agent.get("/api/library?medium=movie&status=wish").expect(200);
     expect(movieLibrary.body.items[0].subject.doubanId).toBe("1292052");
+    expect(movieLibrary.body.pagination.total).toBe(1);
 
     const gameLibrary = await agent.get("/api/library?medium=game&status=wish").expect(200);
     expect(gameLibrary.body.items[0].subject.doubanId).toBe("30347464");
+  });
+
+  it("drops synced medium rows that disappear from the remote collection on the next pull", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    await agent.post("/api/sync/pull").send({}).expect(200);
+    await context.sync.drainQueue();
+
+    let movieLibrary = await agent.get("/api/library?medium=movie&status=wish").expect(200);
+    expect(movieLibrary.body.items).toHaveLength(1);
+
+    mock.setState("movie", { status: undefined as unknown as "wish" });
+
+    await agent.post("/api/sync/pull").send({}).expect(200);
+    await context.sync.drainQueue();
+
+    const overview = await agent.get("/api/me/overview").expect(200);
+    expect(overview.body.totals.some((item: { medium: string; count: number }) => item.medium === "movie" && item.count > 0)).toBe(false);
+
+    movieLibrary = await agent.get("/api/library?medium=movie&status=wish").expect(200);
+    expect(movieLibrary.body.items).toHaveLength(0);
+  });
+
+  it("reads overview totals from the remote profile page", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const overview = await agent.get("/api/me/overview").expect(200);
+    expect(overview.body.totals).toEqual(
+      expect.arrayContaining([
+        { medium: "movie", status: "wish", count: 1 },
+        { medium: "movie", status: "doing", count: 0 },
+        { medium: "movie", status: "done", count: 0 },
+        { medium: "book", status: "wish", count: 1 },
+        { medium: "music", status: "wish", count: 1 },
+        { medium: "game", status: "wish", count: 1 }
+      ])
+    );
+  });
+
+  it("backfills book done ratings from subject detail when the collection page is unavailable", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+    mock.setState("book", { status: "done", rating: null, comment: "" });
+    await agent.post("/api/sync/pull").send({}).expect(200);
+    await context.sync.drainQueue();
+
+    const client = (context.sync as any).client as {
+      getUserCollection: (...args: any[]) => Promise<any>;
+      getSubjectDetail: (...args: any[]) => Promise<any>;
+    };
+    const originalGetUserCollection = client.getUserCollection.bind(client);
+    const originalGetSubjectDetail = client.getSubjectDetail.bind(client);
+
+    client.getUserCollection = async (medium, status, page, cookie, peopleId) => {
+      if (medium === "book" && status === "done") {
+        throw new Error("Douban request failed: 403 Forbidden");
+      }
+      return originalGetUserCollection(medium, status, page, cookie, peopleId);
+    };
+
+    client.getSubjectDetail = async (medium, doubanId, cookie) => {
+      const result = await originalGetSubjectDetail(medium, doubanId, cookie);
+      if (medium === "book") {
+        return {
+          ...result,
+          userSelection: {
+            status: "done",
+            rating: 4,
+            comment: "Recovered from detail"
+          }
+        };
+      }
+      return result;
+    };
+
+    const library = await agent.get("/api/library?medium=book&status=done").expect(200);
+    expect(library.body.items).toHaveLength(1);
+    expect(library.body.items[0].rating).toBe(4);
+    expect(library.body.items[0].comment).toBe("Recovered from detail");
   });
 
   it("logs in through the douban proxy login flow", async () => {
@@ -343,6 +423,42 @@ describe("API integration", () => {
     expect(comments.body.hasMore).toBe(true);
   });
 
+  it("toggles subject comment votes", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const voted = await agent.post("/api/subjects/game/30347464/comments/vote").send({ commentId: "vote-target" }).expect(200);
+    expect(voted.body).toMatchObject({
+      commentId: "vote-target",
+      votes: 13,
+      userVoteState: "voted"
+    });
+
+    const unvoted = await agent.post("/api/subjects/game/30347464/comments/vote").send({ commentId: "vote-target" }).expect(200);
+    expect(unvoted.body).toMatchObject({
+      commentId: "vote-target",
+      votes: 12,
+      userVoteState: "not_voted"
+    });
+  });
+
+  it("toggles legacy subject comment votes when the page omits a cancel url", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const voted = await agent.post("/api/subjects/music/30347464/comments/vote").send({ commentId: "legacy-vote-target" }).expect(200);
+    expect(voted.body).toMatchObject({
+      commentId: "legacy-vote-target",
+      votes: 13,
+      userVoteState: "voted"
+    });
+
+    const unvoted = await agent.post("/api/subjects/music/30347464/comments/vote").send({ commentId: "legacy-vote-target" }).expect(200);
+    expect(unvoted.body).toMatchObject({
+      commentId: "legacy-vote-target",
+      votes: 12,
+      userVoteState: "not_voted"
+    });
+  });
+
   it("proxies allowed image assets", async () => {
     const image = await agent.get(`/api/image?url=${encodeURIComponent(`${mock.url}/images/movie-1292052.jpg`)}`).expect(200);
     expect(image.headers["content-type"]).toContain("image/jpeg");
@@ -356,6 +472,7 @@ describe("API integration", () => {
     expect(following.body.scope).toBe("following");
     expect(following.body.items[0].authorName.length).toBeGreaterThan(0);
     expect(following.body.hasMore).toBe(true);
+    expect(following.body.nextStart).toBe(20);
 
     const mine = await agent.get("/api/timeline?scope=mine").expect(200);
     expect(mine.body.scope).toBe("mine");
@@ -365,10 +482,39 @@ describe("API integration", () => {
   it("serves timeline pagination pages", async () => {
     await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
 
+    const firstPage = await agent.get("/api/timeline?scope=following").expect(200);
     const nextPage = await agent.get("/api/timeline?scope=following&start=20").expect(200);
+    expect(firstPage.body.items[0].id).toBe("following-1");
+    expect(firstPage.body.items.at(-1)?.id).toBe("following-20");
     expect(nextPage.body.start).toBe(20);
     expect(nextPage.body.items.length).toBeGreaterThan(0);
+    expect(nextPage.body.items[0].id).toBe("following-21");
     expect(nextPage.body.hasMore).toBe(false);
+  });
+
+  it("skips a gapped follow-feed page when a later page still has timeline items", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+    mock.setTimelineNextStart(20, 40);
+    mock.setTimelineNextStart(40, 60);
+    mock.setTimelineGapStarts([40]);
+
+    try {
+      const secondPage = await agent.get("/api/timeline?scope=following&start=20").expect(200);
+      expect(secondPage.body.items[0].id).toBe("following-21");
+      expect(secondPage.body.hasMore).toBe(true);
+      expect(secondPage.body.nextStart).toBe(40);
+
+      const recoveredPage = await agent.get("/api/timeline?scope=following&start=40").expect(200);
+      expect(recoveredPage.body.start).toBe(40);
+      expect(recoveredPage.body.items[0].id).toBe("following-61");
+      expect(recoveredPage.body.truncated).not.toBe(true);
+      expect(recoveredPage.body.hasMore).toBe(false);
+      expect(recoveredPage.body.nextStart).toBeNull();
+    } finally {
+      mock.setTimelineGapStarts([]);
+      mock.setTimelineNextStart(20, null);
+      mock.setTimelineNextStart(40, null);
+    }
   });
 
   it("likes, replies to, and reposts timeline statuses", async () => {
@@ -377,6 +523,11 @@ describe("API integration", () => {
     const timeline = await agent.get("/api/timeline?scope=following").expect(200);
     const item = timeline.body.items[0];
     expect(item.detailUrl).toBeTruthy();
+
+    const comments = await agent.post(`/api/timeline/${item.id}/comments`).send({ detailUrl: item.detailUrl }).expect(200);
+    expect(comments.body.statusId).toBe(item.id);
+    expect(comments.body.comments).toHaveLength(2);
+    expect(comments.body.comments[0].content.length).toBeGreaterThan(0);
 
     const liked = await agent.post(`/api/timeline/${item.id}/like`).send({ detailUrl: item.detailUrl }).expect(200);
     expect(["liked", "not_liked"]).toContain(liked.body.userLikeState);
@@ -398,6 +549,7 @@ describe("API integration", () => {
   it("validates timeline action payloads", async () => {
     await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
 
+    await agent.post("/api/timeline/following-1/comments").send({ detailUrl: "not-a-url" }).expect(400);
     await agent.post("/api/timeline/following-1/like").send({ detailUrl: "not-a-url" }).expect(400);
     await agent.post("/api/timeline/following-1/reply").send({ detailUrl: "https://example.com/status", text: "" }).expect(400);
   });
@@ -415,6 +567,7 @@ describe("API integration", () => {
 
     for (const [path, payload] of [
       [`/api/timeline/${item.id}/like`, { detailUrl: item.detailUrl }],
+      [`/api/timeline/${item.id}/comments`, { detailUrl: item.detailUrl }],
       [`/api/timeline/${item.id}/reply`, { detailUrl: item.detailUrl, text: "reply" }],
       [`/api/timeline/${item.id}/repost`, { detailUrl: item.detailUrl, text: "repost" }]
     ] as const) {
@@ -445,6 +598,7 @@ describe("API integration", () => {
   it("returns 401 for personal endpoints without auth", async () => {
     await request(context.app).get("/api/me/overview").expect(401);
     await request(context.app).get("/api/timeline?scope=following").expect(401);
+    await request(context.app).post("/api/timeline/following-1/comments").send({ detailUrl: "https://www.douban.com/people/demo-user/status/following-1/" }).expect(401);
     await request(context.app).post("/api/timeline/following-1/like").send({ detailUrl: "https://www.douban.com/people/demo-user/status/following-1/" }).expect(401);
     await request(context.app).post("/api/sync/pull").send({}).expect(401);
   });

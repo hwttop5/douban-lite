@@ -5,6 +5,14 @@
 > 提醒
 > `douban-lite` 需要接收真实登录态的豆瓣 Cookie，并代替用户发起登录后的豆瓣请求。这类行为可能触发豆瓣风控，例如登录校验、Cookie 失效、临时限流，或账号侧的安全验证。最稳妥的使用方式是自己部署、自己使用。不要把它当成公开 SaaS，也不要让别人把高权限的真实豆瓣 Cookie 粘贴到他们无法控制的第三方实例里。
 
+## 为什么做这个应用
+
+我是一个用了十多年的豆瓣老用户。对我来说，豆瓣最有价值的部分，始终是书、电影、音乐这些内容本身，以及围绕它们产生的记录：看过什么、想看什么、打了什么分、写过什么短评、留下了哪些标签。
+
+但近些年豆瓣 App 的重心越来越偏向社交分发和广告展示，尤其是经常推送一些乌烟瘴气、消耗注意力的豆瓣小组讨论，真正和书影音相关的核心路径反而变得更重、更绕，也更容易被打断。于是我做了 `douban-lite`：只保留书影音相关的核心功能，把搜索、详情、标记、评分、短评、标签、同步这些我最常用的能力留下来，尽量去掉与这些目标无关的社交化干扰。
+
+它不是豆瓣官方 App 的完整替代品，而是一个更克制、更安静、更适合长期自用的版本。
+
 ## 功能说明
 
 - 支持 `电影`、`音乐`、`图书`、`游戏`
@@ -15,29 +23,59 @@
 - 支持共享公共缓存，例如条目数据和榜单快照
 - 支持作为 PWA 安装到手机和桌面端
 
-## 页面截图
-
-以下截图基于本地页面渲染整理。
-
-- 功能总览 GIF 覆盖 `榜单 / 搜索 / 详情 / 我的 / 动态 / 设置`
-- `Pad` 和手机端同样提供了整套功能页轮播
-- 需要登录态的页面使用本地演示数据展示界面结构
-- 所有截图均在等待 10 秒、确认主要内容完成加载后截取
-
 ### 功能总览
 
-#### PC 端
+<table>
+  <tr>
+    <td align="center" valign="top" width="48%"><strong>PC 端</strong></td>
+    <td align="center" valign="top" width="28%"><strong>Pad 端</strong></td>
+    <td align="center" valign="top" width="24%"><strong>手机端</strong></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/screenshots/feature-tour.gif" alt="douban-lite desktop feature tour" width="100%" /></td>
+    <td align="center" valign="top"><img src="docs/screenshots/feature-tour-tablet.gif" alt="douban-lite tablet feature tour" width="100%" /></td>
+    <td align="center" valign="top"><img src="docs/screenshots/feature-tour-mobile.gif" alt="douban-lite mobile feature tour" width="100%" /></td>
+  </tr>
+</table>
 
-![douban-lite desktop feature tour](docs/screenshots/feature-tour.gif)
+## PWA 使用说明
 
-#### Pad 端
+### 手机端 / Pad 端
 
-![douban-lite tablet feature tour](docs/screenshots/feature-tour-tablet.gif)
+手机端和平板端的使用方式相同，推荐直接把 douban-lite 加到系统主屏后再使用，这样打开时会更像一个独立 App。
 
-#### 手机端
+#### iPhone / iPad（Safari）
 
-![douban-lite mobile feature tour](docs/screenshots/feature-tour-mobile.gif)
+1. 用 Safari 打开 douban-lite。
+2. 点击底部或顶部工具栏里的 `分享` 按钮。
+3. 在菜单里选择 `添加到主屏幕`。
+4. 确认名称后点击 `添加`。
+5. 回到主屏幕，点击新图标即可像 App 一样打开 douban-lite。
 
+#### Android 手机 / 平板（Chrome 或 Edge）
+
+1. 用 Chrome 或 Edge 打开 douban-lite。
+2. 点击浏览器右上角菜单。
+3. 选择 `添加到主屏幕`、`安装应用` 或 `Install app`（不同浏览器文案可能略有区别）。
+4. 确认后，douban-lite 会出现在主屏幕或应用列表中。
+5. 之后可直接从主屏幕或应用列表打开，使用方式会更接近原生 App。
+
+### PC 端
+
+推荐使用 Chrome 或 Edge 把 douban-lite 安装为桌面应用。
+
+#### Chrome / Edge
+
+1. 在浏览器中打开 douban-lite。
+2. 查看地址栏右侧是否出现 `安装` 图标，或打开浏览器右上角菜单。
+3. 选择 `安装 douban-lite`、`安装此网站为应用` 或类似选项。
+4. 确认安装后，系统会创建一个独立窗口，并通常可固定到任务栏、开始菜单或桌面。
+5. 以后直接从桌面图标、开始菜单或任务栏启动即可，体验会更像普通桌面 App。
+
+补充说明：
+
+- 第一次以 PWA 方式打开后，仍然需要按上文步骤导入一次豆瓣 Cookie 登录。
+- 如果浏览器没有显示安装入口，先确认当前访问的是 HTTPS 部署地址，或本地开发环境是否已正确启用 PWA 能力。
 
 ## 多用户模型
 

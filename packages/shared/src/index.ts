@@ -17,6 +17,7 @@ export type SyncJobStatus = (typeof syncJobStatuses)[number];
 
 export const timelineScopes = ["following", "mine"] as const;
 export type TimelineScope = (typeof timelineScopes)[number];
+export const timelinePageSize = 20;
 
 export type RankingBoardSource =
   | "html_list"
@@ -59,6 +60,7 @@ export interface SubjectComment {
   authorUrl: string | null;
   authorAvatarUrl: string | null;
   userVoteState: "voted" | "not_voted" | null;
+  canCancelVote?: boolean | null;
   content: string;
   rating: string | null;
   createdAt: string | null;
@@ -366,8 +368,23 @@ export interface TimelineResponse {
   items: TimelineItem[];
   nextStart: number | null;
   hasMore: boolean;
+  truncated?: boolean;
   fetchedAt: string;
   stale: boolean;
+}
+
+export interface TimelineComment {
+  id: string | null;
+  author: string | null;
+  authorUrl: string | null;
+  authorAvatarUrl: string | null;
+  content: string;
+  createdAt: string | null;
+}
+
+export interface TimelineCommentsResponse {
+  statusId: string;
+  comments: TimelineComment[];
 }
 
 export const boardCatalog: Record<Medium, RankingBoardConfig[]> = {

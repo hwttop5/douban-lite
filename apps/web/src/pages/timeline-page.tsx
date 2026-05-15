@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import type { TimelineActionResponse, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
-import { ApiError, getAuthMe, getTimeline, likeTimelineStatus, proxiedImageUrl, replyTimelineStatus, repostTimelineStatus } from "../api";
+import type { TimelineActionResponse, TimelineComment, TimelineItem, TimelineResponse } from "../../../../packages/shared/src";
+import { ApiError, getAuthMe, getTimeline, getTimelineComments, likeTimelineStatus, proxiedImageUrl, replyTimelineStatus, repostTimelineStatus } from "../api";
 import { LoadingButtonLabel, LoadingInline, TimelineSkeletonList } from "../components/loading-state";
 import { useAutoLoadMore } from "../hooks/use-auto-load-more";
 
@@ -169,9 +169,67 @@ function TimelineActionButton({
   );
 }
 
+function TimelineCommentsPanel({
+  item,
+  isLoading,
+  error,
+  comments,
+  disabled,
+  onWriteReply
+}: {
+  item: TimelineItem;
+  isLoading: boolean;
+  error: Error | null;
+  comments: TimelineComment[] | undefined;
+  disabled: boolean;
+  onWriteReply: () => void;
+}) {
+  return (
+    <section className="timeline-comments" aria-label={`\u56de\u590d ${item.authorName ?? item.id}`}>
+      <div className="timeline-comments__toolbar">
+        <strong>{"\u56de\u590d"}</strong>
+        <button type="button" onClick={onWriteReply} disabled={disabled}>
+          {"\u5199\u56de\u590d"}
+        </button>
+      </div>
+      {isLoading ? <LoadingInline label={"\u6b63\u5728\u52a0\u8f7d\u56de\u590d"} tone="soft" /> : null}
+      {error ? <p className="form-error">{error.message}</p> : null}
+      {!isLoading && !error && comments?.length === 0 ? <p className="timeline-comments__empty">{"\u6682\u65e0\u53ef\u663e\u793a\u7684\u56de\u590d"}</p> : null}
+      {comments && comments.length > 0 ? (
+        <ul className="timeline-comments__list">
+          {comments.map((comment, index) => {
+            const avatarUrl = proxiedImageUrl(comment.authorAvatarUrl);
+            return (
+              <li key={comment.id ?? `${item.id}-comment-${index}`}>
+                <span className="timeline-comments__avatar">
+                  {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{comment.author?.slice(0, 1) ?? "\u8c46"}</span>}
+                </span>
+                <span className="timeline-comments__body">
+                  <span className="timeline-comments__meta">
+                    {comment.authorUrl ? (
+                      <a href={comment.authorUrl} target="_blank" rel="noreferrer">
+                        {comment.author ?? "\u8c46\u74e3\u7528\u6237"}
+                      </a>
+                    ) : (
+                      <strong>{comment.author ?? "\u8c46\u74e3\u7528\u6237"}</strong>
+                    )}
+                    {comment.createdAt ? <em>{comment.createdAt}</em> : null}
+                  </span>
+                  <span>{comment.content}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 export function TimelinePage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<TimelineDialogState | null>(null);
+  const [expandedCommentsId, setExpandedCommentsId] = useState<string | null>(null);
 
   const authQuery = useQuery({
     queryKey: ["auth-me"],
@@ -236,6 +294,9 @@ export function TimelinePage() {
         label,
         count: (item) => timelineCount(item.engagements, label) + 1
       });
+      if (state.mode === "reply") {
+        void queryClient.invalidateQueries({ queryKey: ["timeline-comments", state.item.id] });
+      }
       setDialog(null);
     },
     onError: (error) => {
@@ -245,6 +306,20 @@ export function TimelinePage() {
 
   const firstPage = timelineQuery.data?.pages[0];
   const items = timelineQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const expandedCommentsItem = expandedCommentsId ? items.find((item) => item.id === expandedCommentsId) ?? null : null;
+  const expandedCommentsTarget =
+    expandedCommentsItem?.detailUrl != null ? { statusId: expandedCommentsItem.id, detailUrl: expandedCommentsItem.detailUrl } : null;
+  const commentsQuery = useQuery({
+    queryKey: ["timeline-comments", expandedCommentsTarget?.statusId, expandedCommentsTarget?.detailUrl],
+    queryFn: () => {
+      if (!expandedCommentsTarget) {
+        throw new Error("\u8be5\u52a8\u6001\u7f3a\u5c11\u8be6\u60c5\u5730\u5740\uff0c\u6682\u65f6\u4e0d\u80fd\u52a0\u8f7d\u56de\u590d\u3002");
+      }
+      return getTimelineComments(expandedCommentsTarget.statusId, expandedCommentsTarget.detailUrl);
+    },
+    enabled: Boolean(hasSession && expandedCommentsTarget),
+    retry: 1
+  });
   const timelineIsStale = Boolean(firstPage?.stale);
   const timelineActionsDisabled = !hasSession || timelineIsStale || sessionStatus === "invalid";
   const timelineNotice =
@@ -253,10 +328,14 @@ export function TimelinePage() {
       : timelineIsStale
         ? "实时抓取失败，当前显示的是缓存动态。赞、回复和转发已禁用，请重新导入有效的豆瓣 Cookie 后重试。"
         : null;
+  const initialTimelineError = items.length === 0 ? timelineQuery.error : null;
+  const loadMoreError = items.length > 0 && timelineQuery.isFetchNextPageError ? timelineQuery.error : null;
+  const timelineIsTruncated = Boolean(timelineQuery.data?.pages.some((page) => page.truncated));
+  const canAutoLoadMore = Boolean(hasSession && timelineQuery.hasNextPage && !timelineQuery.isFetchNextPageError);
   const showTimelineSkeleton = timelineQuery.isFetching && items.length === 0;
   const showTimelineRefreshHint = timelineQuery.isFetchingNextPage;
   const autoLoadMoreRef = useAutoLoadMore({
-    enabled: Boolean(hasSession),
+    enabled: canAutoLoadMore,
     hasMore: Boolean(timelineQuery.hasNextPage),
     isLoading: timelineQuery.isFetchingNextPage,
     onLoadMore: () => {
@@ -288,11 +367,11 @@ export function TimelinePage() {
           <strong>登录后查看动态</strong>
           <p className="supporting">动态页按用户隔离，需要先导入你的豆瓣 Cookie。</p>
         </section>
-      ) : timelineQuery.error ? (
+      ) : initialTimelineError ? (
         <section className="timeline-state-panel" role="status">
           <strong>动态暂时不可用</strong>
           <p className="supporting">请确认豆瓣 Cookie 已导入且本地 API 正常运行，稍后重试动态页。</p>
-          <p className="form-error">{timelineQuery.error.message}</p>
+          <p className="form-error">{initialTimelineError.message}</p>
         </section>
       ) : null}
 
@@ -313,6 +392,7 @@ export function TimelinePage() {
           const userLikeState = item.userLikeState ?? "unknown";
           const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
           const dialogPending = submitActionMutation.isPending && submitActionMutation.variables?.item.id === item.id;
+          const commentsExpanded = expandedCommentsId === item.id;
           const subjectContent = (
             <>
               {subjectCoverUrl ? <img src={subjectCoverUrl} alt="" /> : <span className="timeline-subject__placeholder">条目</span>}
@@ -382,8 +462,9 @@ export function TimelinePage() {
                     <TimelineActionButton
                       label="回复"
                       count={replyCount}
-                      disabled={timelineActionsDisabled || !availableActions.reply || !item.detailUrl || likePending || dialogPending}
-                      onClick={() => setDialog({ item, mode: "reply", text: "" })}
+                      active={commentsExpanded}
+                      disabled={timelineActionsDisabled || !item.detailUrl || likePending || dialogPending}
+                      onClick={() => setExpandedCommentsId((current) => (current === item.id ? null : item.id))}
                     />
                   </span>
                   <span>
@@ -395,6 +476,16 @@ export function TimelinePage() {
                     />
                   </span>
                 </p>
+                {commentsExpanded ? (
+                  <TimelineCommentsPanel
+                    item={item}
+                    isLoading={commentsQuery.isFetching}
+                    error={commentsQuery.error}
+                    comments={commentsQuery.data?.comments}
+                    disabled={timelineActionsDisabled || !availableActions.reply || !item.detailUrl || likePending || dialogPending}
+                    onWriteReply={() => setDialog({ item, mode: "reply", text: "" })}
+                  />
+                ) : null}
               </div>
             </article>
           );
@@ -404,9 +495,36 @@ export function TimelinePage() {
 
       {likeMutation.error ? <p className="form-error">{likeMutation.error.message}</p> : null}
       {submitActionMutation.error ? <p className="form-error">{submitActionMutation.error.message}</p> : null}
-      {timelineQuery.hasNextPage ? <div ref={autoLoadMoreRef} className="auto-load-sentinel" aria-hidden="true" /> : null}
+      {canAutoLoadMore ? <div ref={autoLoadMoreRef} className="auto-load-sentinel" aria-hidden="true" /> : null}
       {showTimelineRefreshHint ? <p className="auto-load-status"><LoadingInline label="正在展开更多动态" tone="soft" /></p> : null}
-      {!timelineQuery.hasNextPage && !timelineQuery.isFetching && items.length > 0 ? <p className="empty-state">没有更多动态了。</p> : null}
+      {!timelineQuery.hasNextPage && !timelineQuery.isFetching && items.length > 0 && !timelineIsTruncated ? <p className="empty-state">没有更多动态了。</p> : null}
+
+      {loadMoreError ? (
+        <section className="timeline-state-panel timeline-page__load-more-error" role="status">
+          <strong>{"加载更多动态失败"}</strong>
+          <p className="supporting">{"已暂停自动加载，请手动重试。"}</p>
+          <p className="form-error">{loadMoreError.message}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              void timelineQuery.fetchNextPage();
+            }}
+            disabled={timelineQuery.isFetchingNextPage}
+          >
+            {timelineQuery.isFetchingNextPage ? <LoadingButtonLabel label="正在重试" /> : "重试加载"}
+          </button>
+        </section>
+      ) : timelineIsTruncated ? (
+        <section className="timeline-state-panel timeline-page__load-more-error" role="status">
+          <strong>{"加载更多动态受限"}</strong>
+          <p className="supporting">{"豆瓣没有继续返回更早的动态，可能是登录态需要刷新，或上游分页暂时异常。"}</p>
+          <p className="form-error">{"请到设置页重新登录豆瓣后再试一次。"}</p>
+          <Link className="secondary-button" to="/settings">
+            {"前往设置"}
+          </Link>
+        </section>
+      ) : null}
 
       {dialog ? (
         <div className="timeline-action-dialog" role="dialog" aria-modal="true" aria-labelledby="timeline-action-dialog-title">

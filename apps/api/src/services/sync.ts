@@ -5,6 +5,7 @@ import type {
   DoubanSessionStatus,
   LibraryResponse,
   Medium,
+  OverviewResponse,
   RankingResponse,
   SearchResponse,
   ShelfStatus,
@@ -14,6 +15,7 @@ import type {
   SyncJobRecord,
   SyncJobType,
   TimelineActionResponse,
+  TimelineCommentsResponse,
   TimelineResponse,
   TimelineScope,
   UpdateLibraryStateInput
@@ -52,6 +54,21 @@ function hasRichSubjectFields(subject: SubjectDetailResponse["subject"]) {
     subject.summary ||
     subject.creators.length > 0 ||
     Object.keys(subject.metadata).some((key) => key !== "externalUrl" && key !== "board")
+  );
+}
+
+function hasSuspiciousMetadata(subject: SubjectDetailResponse["subject"]) {
+  const metadataLabels = ["导演", "主演", "作者", "表演者", "流派", "专辑类型", "介质", "发行时间", "出版者", "唱片数", "开发商", "发行商", "平台"];
+  const nestedLabelPattern = new RegExp(`(?:${metadataLabels.join("|")})[:：]`);
+  return (
+    subject.creators.some((value) => nestedLabelPattern.test(value)) ||
+    Object.entries(subject.metadata).some(([key, value]) => {
+      if (key === "externalUrl" || key === "board") {
+        return false;
+      }
+      const text = Array.isArray(value) ? value.join(" / ") : value;
+      return typeof text === "string" && nestedLabelPattern.test(text) && !text.startsWith(`${key}:`) && !text.startsWith(`${key}：`);
+    })
   );
 }
 
@@ -264,11 +281,16 @@ export class SyncService {
     return this.runTimelineAction(userId, () => this.client.repostTimelineStatus(statusId, detailUrl, text, session.cookie));
   }
 
+  async getTimelineComments(userId: string, statusId: string, detailUrl: string): Promise<TimelineCommentsResponse> {
+    const session = this.requireDoubanSession(userId);
+    return this.runTimelineAction(userId, () => this.client.getTimelineComments(statusId, detailUrl, session.cookie));
+  }
+
   private async enrichRelatedSubjects(subjects: SubjectDetailResponse["relatedSubjects"], cookie?: string) {
     return Promise.all(
       subjects.map(async (subject, index) => {
         const cached = this.db.getSubject(subject.medium, subject.doubanId);
-        if (cached && hasRichSubjectFields(cached)) {
+        if (cached && hasRichSubjectFields(cached) && !hasSuspiciousMetadata(cached)) {
           return mergeSubjectRecords(subject, cached);
         }
         if (index >= RELATED_SUBJECT_ENRICH_LIMIT) {
@@ -346,6 +368,50 @@ export class SyncService {
         }
       };
     }
+    const peopleId = session.peopleId ?? this.db.getUserById(userId)?.peopleId ?? null;
+    if (input.status && peopleId) {
+      try {
+        const remote = await this.client.getUserCollection(input.medium, input.status, input.page, session.cookie, peopleId);
+        const fetchedAt = nowIso();
+        const pageSize = remote.items.length > 0 ? remote.items.length : input.pageSize;
+        const total =
+          remote.total ??
+          (remote.hasNext ? input.page * Math.max(1, pageSize) + 1 : Math.max(0, (input.page - 1) * Math.max(1, pageSize) + remote.items.length));
+
+        return {
+          items: remote.items.map((item) => {
+            this.db.upsertSubject(item.subject);
+            const local = this.db.getUserItem(userId, item.subject.medium, item.subject.doubanId);
+            return {
+              medium: item.subject.medium,
+              doubanId: item.subject.doubanId,
+              status: item.status,
+              rating: item.rating,
+              comment: item.comment,
+              tags: local?.tags ?? [],
+              syncToTimeline: local?.syncToTimeline ?? true,
+              syncState: local?.syncState ?? "synced",
+              errorMessage: local?.errorMessage ?? null,
+              updatedAt: local?.updatedAt ?? fetchedAt,
+              lastSyncedAt: local?.lastSyncedAt ?? fetchedAt,
+              lastPushedAt: local?.lastPushedAt ?? null,
+              subject: item.subject
+            };
+          }),
+          pagination: {
+            page: input.page,
+            pageSize,
+            total,
+            hasMore: remote.hasNext
+          }
+        };
+      } catch {
+        // Fall back to the local mirror when the live collection page is unavailable.
+        if (input.medium === "book" && input.status === "done") {
+          await this.backfillLibraryRatingsFromDetails(userId, input.medium, input.status, session.cookie);
+        }
+      }
+    }
     const response = this.db.listLibrary(userId, input);
     const missingCoverItems = response.items.filter((item) => !item.subject.coverUrl);
     if (missingCoverItems.length === 0) {
@@ -364,8 +430,75 @@ export class SyncService {
     return refreshed ? this.db.listLibrary(userId, input) : response;
   }
 
-  getOverview(userId: string) {
-    return this.db.getOverview(userId);
+  private async backfillLibraryRatingsFromDetails(userId: string, medium: Medium, status: ShelfStatus, cookie: string) {
+    const existing = this.db.listLibrary(userId, { medium, status, page: 1, pageSize: 40 }).items;
+    const missingRatings = existing.filter((item) => item.rating == null);
+    if (missingRatings.length === 0) {
+      return;
+    }
+
+    const timestamp = nowIso();
+    for (const item of missingRatings) {
+      try {
+        const detail = await this.client.getSubjectDetail(item.medium, item.doubanId, cookie);
+        this.db.upsertSubject(detail.subject);
+        const actual = detail.userSelection;
+        if (!actual || actual.status !== status) {
+          continue;
+        }
+        this.db.upsertUserItem(userId, {
+          medium: item.medium,
+          doubanId: item.doubanId,
+          status: actual.status,
+          rating: actual.rating,
+          comment: actual.comment,
+          tags: item.tags,
+          syncToTimeline: item.syncToTimeline,
+          syncState: item.syncState,
+          errorMessage: item.errorMessage,
+          updatedAt: timestamp,
+          lastSyncedAt: timestamp,
+          lastPushedAt: item.lastPushedAt
+        });
+      } catch {
+        // Keep the existing mirror entry when individual detail reads fail.
+      }
+    }
+  }
+
+  async getOverview(userId: string): Promise<OverviewResponse> {
+    const fallback = this.db.getOverview(userId);
+    const session = this.getDoubanCookie(userId);
+    const peopleId = session?.peopleId ?? this.db.getUserById(userId)?.peopleId ?? null;
+    if (!session?.cookie || !peopleId) {
+      return fallback;
+    }
+    try {
+      const profile = await this.client.getProfileOverview(session.cookie, peopleId);
+      if (profile.totals.length === 0) {
+        return fallback;
+      }
+      const remoteCounts = new Map(profile.totals.map((item) => [`${item.medium}:${item.status}`, item.count] as const));
+      return {
+        ...fallback,
+        totals: mediums.flatMap((medium) =>
+          shelfStatuses.map((status) => ({
+            medium,
+            status,
+            count: remoteCounts.get(`${medium}:${status}`) ?? 0
+          }))
+        ),
+        sessionStatus: {
+          ...fallback.sessionStatus,
+          peopleId: profile.peopleId ?? fallback.sessionStatus.peopleId,
+          displayName: profile.displayName ?? fallback.sessionStatus.displayName,
+          avatarUrl: profile.avatarUrl ?? fallback.sessionStatus.avatarUrl,
+          ipLocation: profile.ipLocation ?? fallback.sessionStatus.ipLocation
+        }
+      };
+    } catch {
+      return fallback;
+    }
   }
 
   listSyncEvents(userId: string, limit = 50) {
@@ -515,19 +648,24 @@ export class SyncService {
       lastError: null
     });
     for (const medium of mediums) {
+      const seenDoubanIds = new Set<string>();
       for (const status of shelfStatuses) {
-        await this.syncCollectionStatus(job.userId, medium, status, session.cookie, validation.peopleId);
+        const ids = await this.syncCollectionStatus(job.userId, medium, status, session.cookie, validation.peopleId);
+        ids.forEach((doubanId) => seenDoubanIds.add(doubanId));
       }
+      this.db.deleteMissingSyncedUserItems(job.userId, medium, Array.from(seenDoubanIds));
     }
   }
 
   private async syncCollectionStatus(userId: string, medium: Medium, status: ShelfStatus, cookie: string, peopleId: string) {
+    const seenDoubanIds = new Set<string>();
     let page = 1;
     let hasNext = true;
     let pageCount = 0;
     while (hasNext && pageCount < 20) {
       const result = await this.client.getUserCollection(medium, status, page, cookie, peopleId);
       result.items.forEach((item) => {
+        seenDoubanIds.add(item.subject.doubanId);
         this.db.upsertSubject(item.subject);
         this.db.upsertUserItem(userId, {
           medium,
@@ -545,6 +683,7 @@ export class SyncService {
       page = result.nextPage ?? page + 1;
       pageCount += 1;
     }
+    return Array.from(seenDoubanIds);
   }
 
   private async runPush(job: SyncJobRecord) {

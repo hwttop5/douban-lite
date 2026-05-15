@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import type { LibraryEntry, Medium, SubjectRecord } from "../../../../packages/shared/src";
 import { statusLabels } from "../../../../packages/shared/src";
 import { proxiedImageUrl } from "../api";
+import { ImageFallback } from "./image-fallback";
 
 function renderStars(score: number | null) {
   if (score == null) {
@@ -34,22 +35,25 @@ export function SubjectCard({ medium, subject, item, extra, className = "subject
   const externalUrl = typeof subject.metadata.externalUrl === "string" ? subject.metadata.externalUrl : null;
   const externalOnly = subject.metadata.externalOnly === "true";
   const coverUrl = proxiedImageUrl(subject.coverUrl);
+  const isRelatedCard = className.includes("subject-card--related");
+  const shouldSuppressMusicMeta = isRelatedCard && subject.medium === "music";
   const scoreLabel = subject.averageRating ? `豆瓣 ${subject.averageRating.toFixed(1)}` : externalOnly ? "豆瓣外链" : "暂无豆瓣评分";
-  const creatorLabel = subject.creators.length > 0 ? subject.creators.join(" / ") : null;
+  const creatorLabel = !shouldSuppressMusicMeta && subject.creators.length > 0 ? subject.creators.join(" / ") : null;
+  const subtitle = shouldSuppressMusicMeta ? null : subject.subtitle;
   const detailState = location.pathname.startsWith("/rankings") || location.pathname.startsWith("/search") || location.pathname.startsWith("/me")
     ? { from: location.pathname }
     : undefined;
   const content = (
     <>
       <div className="subject-card__cover">
-        {coverUrl ? <img src={coverUrl} alt={subject.title} loading="lazy" /> : <span>无封面</span>}
+        <ImageFallback src={coverUrl} alt={subject.title} loading="lazy" fallback="无封面" />
       </div>
       <div className="subject-card__body">
         <div className="subject-card__header">
           <h3>{subject.title}</h3>
           {subject.year ? <span>{subject.year}</span> : null}
         </div>
-        {subject.subtitle ? <p className="subject-card__subtitle">{subject.subtitle}</p> : null}
+        {subtitle ? <p className="subject-card__subtitle">{subtitle}</p> : null}
         <p className="subject-card__meta">
           <span className="subject-card__meta-score">{scoreLabel}</span>
           {creatorLabel ? <span className="subject-card__meta-details">{creatorLabel}</span> : null}

@@ -4,8 +4,10 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { boardCatalog, mediums } from "../../../packages/shared/src";
 import {
+  inferSubjectCommentCancelVoteUrl,
   parseAuthToken,
   parseDoubanProfile,
+  parseProfileCollectionTotals,
   parseInterestSelection,
   parseRanking,
   parseSearchResults,
@@ -14,7 +16,9 @@ import {
   parseSubjectDetail,
   parseSubjectDetailExtras,
   parseTimelineActionContext,
+  parseTimelineComments,
   parseTimeline,
+  parseTimelinePage,
   parseUserCollection
 } from "../src/douban/parsers";
 
@@ -279,6 +283,46 @@ describe("Douban parsers", () => {
     expect(result.items[0].comment).toBe("通关之后我的心里跟眼前凯尔莫罕一样空空荡荡的😑");
   });
 
+  it("parses collection ratings from legacy ratingN-t classes", () => {
+    const result = parseUserCollection(
+      `
+      <div class="item comment-item" data-status="collect">
+        <div class="info">
+          <ul>
+            <li class="title"><a href="https://music.douban.com/subject/3293508/">Album One</a></li>
+            <li><span class="rating5-t"></span><span class="date">2026-03-19</span></li>
+          </ul>
+        </div>
+      </div>
+      `,
+      "https://music.douban.com/people/demo/collect",
+      "music",
+      "done"
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].rating).toBe(5);
+  });
+
+  it("parses collection ratings from allstar classes without using average ratings", () => {
+    const result = parseUserCollection(
+      `
+      <article class="collection-item" data-status="collect">
+        <a href="https://movie.douban.com/subject/1862151/"><img src="/cover.jpg" /></a>
+        <h3>Movie Rated By User</h3>
+        <span class="allstar4"></span>
+        <span class="average-rating" data-average-rating="8.9"></span>
+      </article>
+      `,
+      "https://movie.douban.com/people/demo/collect",
+      "movie",
+      "done"
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].rating).toBe(4);
+  });
+
   it("parses music comment vote actions from vote-comment handlers", () => {
     const action = parseSubjectCommentVoteAction(
       `
@@ -307,6 +351,104 @@ describe("Douban parsers", () => {
       cancelVoteUrl: null,
       userVoteState: "not_voted",
       votes: 174
+    });
+  });
+
+  it("parses voted legacy comment vote actions without explicit cancel urls", () => {
+    const action = parseSubjectCommentVoteAction(
+      `
+      <div class="comment-list">
+        <li class="comment-item" data-cid="427795822">
+          <span class="comment-vote">
+            <span class="vote-count">175</span>
+            已投票
+          </span>
+        </li>
+      </div>
+      <script>
+        SUBJECT_COMMENTS.createVoteHandler({
+          api: '/j/comment/:id/vote',
+          voteSelector: '.vote-comment',
+          textSelector: '.vote-count'
+        });
+      </script>
+      `,
+      "427795822",
+      "https://music.douban.com/subject/3040149/comments/"
+    );
+
+    expect(action).toEqual({
+      voteUrl: "https://music.douban.com/j/comment/427795822/vote",
+      cancelVoteUrl: null,
+      userVoteState: "voted",
+      votes: 175
+    });
+  });
+
+  it("infers cancel-vote urls for comment vote handlers", () => {
+    expect(inferSubjectCommentCancelVoteUrl("https://movie.douban.com/j/comment/vote", "4771596415")).toBe(
+      "https://movie.douban.com/j/comment/4771596415/cancel_vote"
+    );
+    expect(inferSubjectCommentCancelVoteUrl("https://music.douban.com/j/comment/427795822/vote", "427795822")).toBe(
+      "https://music.douban.com/j/comment/427795822/cancel_vote"
+    );
+  });
+
+  it("parses voted comment actions with cancel urls", () => {
+    const action = parseSubjectCommentVoteAction(
+      `
+      <div class="comment-list">
+        <div class="comment-item" data-cid="427795822">
+          <div class="digg">
+            <span class="vote-count">175</span>
+            <a href="/j/comment/427795822/cancel_vote" data-href="/j/comment/427795822/vote">已投票</a>
+          </div>
+        </div>
+      </div>
+      `,
+      "427795822",
+      "https://movie.douban.com/subject/1292052/comments/"
+    );
+
+    expect(action).toEqual({
+      voteUrl: "https://movie.douban.com/j/comment/427795822/vote",
+      cancelVoteUrl: "https://movie.douban.com/j/comment/427795822/cancel_vote",
+      userVoteState: "voted",
+      votes: 175
+    });
+  });
+
+  it("parses clean music metadata from the info block", () => {
+    const subject = parseSubjectDetail(
+      `
+      <html><body>
+        <h1>Heavy Serenade</h1>
+        <div id="info">
+          <span class="pl">又名:</span> 5TH EP<br>
+          <span class="pl">表演者:</span> NMIXX / 엔믹스<br>
+          <span class="pl">流派:</span> 流行<br>
+          <span class="pl">专辑类型:</span> EP<br>
+          <span class="pl">介质:</span> 数字(Digital)<br>
+          <span class="pl">发行时间:</span> 2026-05-11<br>
+          <span class="pl">出版者:</span> JYP ENTERTAINMENT<br>
+          <span class="pl">唱片数:</span> 1<br>
+        </div>
+      </body></html>
+      `,
+      "https://music.douban.com/subject/38424520/",
+      "music"
+    );
+
+    expect(subject.creators).toEqual(["NMIXX", "엔믹스"]);
+    expect(subject.metadata).toMatchObject({
+      又名: "5TH EP",
+      表演者: "NMIXX / 엔믹스",
+      流派: "流行",
+      专辑类型: "EP",
+      介质: "数字(Digital)",
+      发行时间: "2026-05-11",
+      出版者: "JYP ENTERTAINMENT",
+      唱片数: "1"
     });
   });
 
@@ -381,6 +523,61 @@ describe("Douban parsers", () => {
 
     expect(profile.displayName).toBe("Demo User");
     expect(profile.avatarUrl).toBe("https://www.douban.com/avatar.jpg");
+  });
+
+  it("parses collection totals from a Douban profile page", () => {
+    const totals = parseProfileCollectionTotals(`
+      <div id="movie">2部在看 201部想看 742部看过</div>
+      <div id="book">19本在读 130本想读 252本读过</div>
+      <div id="music">0张在听 0张想听 309张听过</div>
+      <div id="game">在玩22 想玩52 玩过128</div>
+    `);
+
+    expect(totals).toEqual(
+      expect.arrayContaining([
+        { medium: "movie", status: "doing", count: 2 },
+        { medium: "movie", status: "wish", count: 201 },
+        { medium: "movie", status: "done", count: 742 },
+        { medium: "book", status: "doing", count: 19 },
+        { medium: "book", status: "wish", count: 130 },
+        { medium: "book", status: "done", count: 252 },
+        { medium: "music", status: "doing", count: 0 },
+        { medium: "music", status: "wish", count: 0 },
+        { medium: "music", status: "done", count: 309 },
+        { medium: "game", status: "doing", count: 22 },
+        { medium: "game", status: "wish", count: 52 },
+        { medium: "game", status: "done", count: 128 }
+      ])
+    );
+  });
+
+  it("parses collection pagination total from title and next links", () => {
+    const result = parseUserCollection(
+      `
+      <html>
+        <head><title>ttop5想看的影视(201)</title></head>
+        <body>
+          <article class="collection-item" data-status="wish">
+            <a href="https://movie.douban.com/subject/1292052/"><img src="/cover.jpg" /></a>
+            <h3>肖申克的救赎</h3>
+          </article>
+          <div class="paginator">
+            <span class="next">
+              <link rel="next" href="/people/ttop5/wish?start=15" />
+              <a href="/people/ttop5/wish?start=15">后页&gt;</a>
+            </span>
+          </div>
+        </body>
+      </html>
+      `,
+      "https://movie.douban.com/people/ttop5/wish?start=0",
+      "movie",
+      "wish"
+    );
+
+    expect(result.total).toBe(201);
+    expect(result.hasNext).toBe(true);
+    expect(result.nextPage).toBe(2);
   });
 
   it("parses music homepage artist boards", () => {
@@ -529,6 +726,108 @@ describe("Douban parsers", () => {
     expect(items[0].content).toContain("Trip wrap-up with photos.");
   });
 
+  it("keeps reshared wrapper ids stable while targeting the inner real status detail page", () => {
+    const items = parseTimeline(
+      `
+      <div class="new-status status-wrapper status-reshared-wrapper" data-sid="outer-status">
+        <div class="status-item" data-sid="outer-status">
+          <div class="hd reshared_hd" data-status-url="https://www.douban.com/people/demo-user/status/outer-status/">
+            <a class="lnk-people" href="/people/demo-user/">Demo User</a>
+            <div class="text">Demo User 转发：<blockquote>转发说明</blockquote></div>
+          </div>
+          <div class="actions">
+            <span class="created_at"><a href="/people/demo-user/status/outer-status/">2小时前</a></span>
+            <a class="btn btn-action-reply new-reply" href="/people/demo-user/status/outer-status/" data-count="0">回应</a>
+          </div>
+        </div>
+        <div class="status-real-wrapper" data-sid="inner-status" data-status-url="https://www.douban.com/people/demo-user/status/inner-status/">
+          <div class="status-item" data-sid="inner-status" data-target-type="movie" data-object-id="1292052">
+            <div class="hd">
+              <a class="lnk-people" href="/people/demo-user/">Demo User</a>
+              <div class="text">Demo User 在看</div>
+            </div>
+            <div class="block block-subject">
+              <div class="title"><a href="https://movie.douban.com/subject/1292052/">肖申克的救赎</a></div>
+            </div>
+            <div class="actions">
+              <span class="created_at"><a href="/people/demo-user/status/inner-status/">5月10日</a></span>
+              <a class="btn btn-action-reply new-reply" href="/people/demo-user/status/inner-status/" data-count="2">2回应</a>
+              <span class="count like-count">赞(1)</span>
+              <a class="btn btn-key-reshare btn-reshare new-reshare" data-action-type="reshare">转发</a>
+              <span class="count reshared-count" data-count="1">(1)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/"
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe("outer-status");
+    expect(items[0].detailUrl).toBe("https://www.douban.com/people/demo-user/status/inner-status/");
+    expect(items[0].createdAtText).toBe("5月10日");
+    expect(items[0].subjectTitle).toBe("肖申克的救赎");
+    expect(items[0].engagements).toEqual([
+      { label: "回应", count: 2 },
+      { label: "赞", count: 1 },
+      { label: "转发", count: 1 }
+    ]);
+  });
+
+  it("derives the next timeline start from paging links instead of parsed item count", () => {
+    const page = parseTimelinePage(
+      `
+      <html>
+        <body>
+          ${Array.from({ length: 17 }, (_, index) => `
+            <div class="new-status status-wrapper" data-sid="s-${index + 1}">
+              <div class="status-item" data-sid="s-${index + 1}">
+                <a href="/people/demo-user/">Friend ${index + 1}</a>
+                <blockquote>status ${index + 1}</blockquote>
+                <a href="/people/demo-user/status/s-${index + 1}/">05-${String(index + 1).padStart(2, "0")}</a>
+              </div>
+            </div>
+          `).join("")}
+          <a class="next" href="/?start=20">后页</a>
+        </body>
+      </html>
+      `,
+      "https://www.douban.com/",
+      0
+    );
+
+    expect(page.items).toHaveLength(17);
+    expect(page.nextStart).toBe(20);
+    expect(page.hasMore).toBe(true);
+  });
+
+  it("stops timeline pagination when the page has a next link but no parseable items", () => {
+    const page = parseTimelinePage(
+      `
+      <html>
+        <body>
+          <div class="stream-items"></div>
+          <div class="paginator">
+            <span class="next">
+              <link rel="next" href="?p=3" />
+              <a href="?p=3">后页&gt;</a>
+            </span>
+          </div>
+        </body>
+      </html>
+      `,
+      "https://www.douban.com/?p=2",
+      20
+    );
+
+    expect(page.items).toHaveLength(0);
+    expect(page.nextStart).toBeNull();
+    expect(page.hasMore).toBe(false);
+    expect(page.upstreamNextStart).toBe(40);
+    expect(page.upstreamHasMore).toBe(true);
+  });
+
   it("parses timeline detail action forms and liked state", () => {
     const context = parseTimelineActionContext(
       `
@@ -637,5 +936,33 @@ describe("Douban parsers", () => {
     expect(context?.replyForm?.textFieldName).toBe("rv_comment");
     expect(context?.repostForm?.actionUrl).toBe("https://www.douban.com/j/status/reshare");
     expect(context?.repostForm?.textFieldName).toBe("text");
+  });
+
+  it("parses timeline detail comments", () => {
+    const comments = parseTimelineComments(
+      `
+      <div id="comments" class="comment-list">
+        <div class="comment-item" data-cid="c1">
+          <span class="comment-info">
+            <a href="/people/alice/"><img src="/avatar/alice.jpg" />Alice</a>
+          </span>
+          <p class="comment-content">写得很好。</p>
+          <span class="pubtime">刚刚</span>
+        </div>
+      </div>
+      `,
+      "https://www.douban.com/people/demo-user/status/s-js-actions/"
+    );
+
+    expect(comments).toEqual([
+      {
+        id: "c1",
+        author: "Alice",
+        authorUrl: "https://www.douban.com/people/alice/",
+        authorAvatarUrl: "https://www.douban.com/avatar/alice.jpg",
+        content: "写得很好。",
+        createdAt: "刚刚"
+      }
+    ]);
   });
 });

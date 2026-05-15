@@ -349,12 +349,16 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     response.json({ ok: true });
   });
 
-  app.get("/api/me/overview", (request: AuthenticatedRequest, response) => {
+  app.get("/api/me/overview", async (request: AuthenticatedRequest, response, next) => {
     const userId = requireUser(request, response);
     if (!userId) {
       return;
     }
-    response.json(sync.getOverview(userId));
+    try {
+      response.json(await sync.getOverview(userId));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/library", async (request: AuthenticatedRequest, response, next) => {
@@ -474,6 +478,23 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
         return;
       }
       response.json(await sync.getTimeline(userId, scope.data, start));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/timeline/:statusId/comments", async (request: AuthenticatedRequest, response, next) => {
+    const userId = requireUser(request, response);
+    if (!userId) {
+      return;
+    }
+    try {
+      const body = timelineActionTargetSchema.safeParse(request.body);
+      if (!body.success) {
+        badRequest(response, "动态评论请求参数无效。", body.error.flatten());
+        return;
+      }
+      response.json(await sync.getTimelineComments(userId, routeParam(request.params.statusId), body.data.detailUrl));
     } catch (error) {
       next(error);
     }

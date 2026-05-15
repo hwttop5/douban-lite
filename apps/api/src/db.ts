@@ -23,7 +23,7 @@ import type {
   TimelineScope,
   UserItemRecord
 } from "../../../packages/shared/src";
-import { shelfStatuses } from "../../../packages/shared/src";
+import { shelfStatuses, timelinePageSize } from "../../../packages/shared/src";
 
 const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
@@ -614,6 +614,20 @@ export class AppDatabase {
       );
   }
 
+  deleteMissingSyncedUserItems(userId: string, medium: Medium, doubanIds: string[]) {
+    if (doubanIds.length === 0) {
+      this.db.prepare(`DELETE FROM user_items WHERE user_id = ? AND medium = ? AND sync_state = 'synced'`).run(userId, medium);
+      return;
+    }
+    const placeholders = doubanIds.map(() => "?").join(", ");
+    this.db
+      .prepare(`
+        DELETE FROM user_items
+        WHERE user_id = ? AND medium = ? AND sync_state = 'synced' AND douban_id NOT IN (${placeholders})
+      `)
+      .run(userId, medium, ...doubanIds);
+  }
+
   listLibrary(userId: string, input: { medium: Medium; status?: ShelfStatus; page: number; pageSize: number }): LibraryResponse {
     const conditions = [`u.user_id = ?`, `u.medium = ?`];
     const params: Array<string | number> = [userId, input.medium];
@@ -875,7 +889,7 @@ export class AppDatabase {
       start: 0,
       items,
       nextStart: items.length > 0 ? items.length : null,
-      hasMore: items.length >= 30,
+      hasMore: items.length >= timelinePageSize,
       fetchedAt: String(row.fetched_at),
       stale: false
     };

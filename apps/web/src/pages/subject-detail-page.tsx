@@ -5,6 +5,7 @@ import type { ShelfStatus, SubjectComment, SubjectDetailResponse, SubjectMediaIt
 import { mediumLabels, mediumSchema, statusLabels } from "../../../../packages/shared/src";
 import { getAuthMe, getSubjectComments, getSubjectDetail, proxiedImageUrl, updateLibraryState, voteSubjectComment } from "../api";
 import { CommentSkeletonList, DetailPageSkeleton, LoadingButtonLabel, LoadingInline } from "../components/loading-state";
+import { ImageFallback } from "../components/image-fallback";
 import { buildLoginPath, getRelativeLocation } from "../login-routing";
 import { SubjectCard } from "../components/subject-card";
 import { useAutoLoadMore } from "../hooks/use-auto-load-more";
@@ -33,11 +34,11 @@ function ratingLabelToScore(label: string | null) {
   return scores[label] ?? null;
 }
 
-function renderStars(score: number | null) {
-  if (!score) {
+function renderStars(score: number | null, options?: { showEmpty?: boolean }) {
+  const normalized = score == null ? 0 : Math.max(0, Math.min(5, Math.round(score)));
+  if (normalized === 0 && !options?.showEmpty) {
     return null;
   }
-  const normalized = Math.max(1, Math.min(5, Math.round(score)));
   return (
     <span className="douban-stars" aria-label={`${normalized} 星`}>
       <span>{"★".repeat(normalized)}</span>
@@ -133,6 +134,16 @@ function buildRelatedDetailLines(subject: SubjectDetailResponse["subject"]) {
   return [];
 }
 
+function summaryCollapseLength(medium: ReturnType<typeof mediumSchema.parse>) {
+  if (medium === "book") {
+    return 180;
+  }
+  if (medium === "music") {
+    return 220;
+  }
+  return 160;
+}
+
 function getVisibleUserItem(userItem: SubjectDetailResponse["userItem"], hasDoubanSession: boolean) {
   return hasDoubanSession ? userItem : null;
 }
@@ -196,7 +207,14 @@ export function SubjectDetailPage() {
     onSuccess: (result) => {
       const applyVote = (items: SubjectComment[]) =>
         items.map((comment) =>
-          comment.id === result.commentId ? { ...comment, votes: result.votes, userVoteState: result.userVoteState } : comment
+          comment.id === result.commentId
+            ? {
+                ...comment,
+                votes: result.votes,
+                userVoteState: result.userVoteState,
+                canCancelVote: result.userVoteState === "voted" ? comment.canCancelVote === true : false
+              }
+            : comment
         );
       queryClient.setQueryData(["subject", medium, doubanId], (current: SubjectDetailResponse | undefined) =>
         current
@@ -216,6 +234,7 @@ export function SubjectDetailPage() {
               }
             : current
       );
+      void queryClient.invalidateQueries({ queryKey: ["subject-comments", medium, doubanId, 0] });
     }
   });
 
@@ -259,7 +278,8 @@ export function SubjectDetailPage() {
   const tableOfContents = detailQuery.data?.tableOfContents ?? [];
   const relatedSubjects = detailQuery.data?.relatedSubjects ?? [];
   const mediaItems = [...media.videos, ...media.images];
-  const [visibleMediaCount, setVisibleMediaCount] = useState(medium === "movie" ? 2 : 4);
+  const initialVisibleMediaCount = medium === "movie" ? 2 : 4;
+  const [visibleMediaCount, setVisibleMediaCount] = useState(initialVisibleMediaCount);
   const [visibleStaffCount, setVisibleStaffCount] = useState(4);
   const [visibleRelatedCount, setVisibleRelatedCount] = useState(4);
   const [tableOfContentsExpanded, setTableOfContentsExpanded] = useState(false);
@@ -273,11 +293,10 @@ export function SubjectDetailPage() {
   const hasMoreRelatedSubjects = visibleRelatedCount < relatedSubjects.length;
   const shouldCollapseTableOfContents = medium === "book" && tableOfContents.length > 10;
   const summaryText = subject?.summary ?? "";
-  const shouldCollapseSummary = medium === "book" && summaryText.length > 180;
+  const shouldCollapseSummary = summaryText.length > summaryCollapseLength(medium);
   const promotedUserComment = shouldPromoteUserComment(visibleUserItem?.comment) ? visibleUserItem?.comment?.trim() ?? null : null;
   const userItemCommentIsHint = looksLikeUserItemHint(visibleUserItem?.comment);
   const shouldRenderUserComment = Boolean(visibleUserItem?.comment) && !promotedUserComment;
-  const relatedLoadMoreStep = medium === "game" ? 4 : 2;
   useEffect(() => {
     setVisibleMediaCount(medium === "movie" ? 2 : 4);
     setVisibleStaffCount(4);
@@ -370,7 +389,7 @@ export function SubjectDetailPage() {
 
   if (detailQuery.error || !subject) {
     return (
-      <div className="page">
+      <div className="page page--floating-back-safe">
         <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
           <span>‹</span>
         </button>
@@ -380,7 +399,7 @@ export function SubjectDetailPage() {
   }
 
   return (
-    <div className="page detail-page">
+    <div className="page detail-page detail-page--with-back-button">
       <button className="detail-back-button" type="button" onClick={handleBack} aria-label="返回">
         <span>‹</span>
       </button>
@@ -396,7 +415,7 @@ export function SubjectDetailPage() {
       {shareMessage ? <span className="detail-share-toast">{shareMessage}</span> : null}
       <section className="detail-hero">
         <div className="detail-hero__cover">
-          {coverUrl ? <img src={coverUrl} alt={subject.title} /> : <span>无封面</span>}
+          <ImageFallback src={coverUrl} alt={subject.title} fallback="无封面" loading="eager" />
         </div>
         <div className="detail-hero__body">
           <h1>{subject.title}</h1>
@@ -513,7 +532,7 @@ export function SubjectDetailPage() {
                   rel={member.profileUrl ? "noreferrer" : undefined}
                 >
                   <span className="detail-staff-card__avatar">
-                    {avatarUrl ? <img src={avatarUrl} alt={member.name} loading="lazy" /> : <span>{member.name.slice(0, 1)}</span>}
+                    <ImageFallback src={avatarUrl} alt={member.name} fallback={member.name.slice(0, 1)} loading="lazy" />
                   </span>
                   <strong>{member.name}</strong>
                   {member.role ? <span>{member.role}</span> : null}
@@ -523,8 +542,8 @@ export function SubjectDetailPage() {
           </div>
           {hasMoreStaffMembers ? (
             <div className="detail-section__footer">
-              <button type="button" className="detail-more-button" onClick={() => setVisibleStaffCount((count) => count + 4)}>
-                查看更多
+              <button type="button" className="detail-more-button" onClick={() => setVisibleStaffCount(staff.length)}>
+                查看全部
               </button>
             </div>
           ) : null}
@@ -579,7 +598,7 @@ export function SubjectDetailPage() {
                 return (
                   <button key={item.url} type="button" className="detail-media-card detail-media-card--button" onClick={() => setActiveImage(item)}>
                     <span className="detail-media-card__thumb">
-                      {thumbnailUrl ? <img src={thumbnailUrl} alt={title} loading="lazy" /> : <span>{renderMediaLabel(item)}</span>}
+                      <ImageFallback src={thumbnailUrl} alt={title} fallback={renderMediaLabel(item)} loading="lazy" />
                     </span>
                     <span className="detail-media-card__meta">
                       <strong>{title}</strong>
@@ -591,7 +610,7 @@ export function SubjectDetailPage() {
               return (
                 <a key={item.url} href={item.url} target="_blank" rel="noreferrer" className="detail-media-card">
                   <span className="detail-media-card__thumb">
-                    {thumbnailUrl ? <img src={thumbnailUrl} alt={title} loading="lazy" /> : <span>{renderMediaLabel(item)}</span>}
+                    <ImageFallback src={thumbnailUrl} alt={title} fallback={renderMediaLabel(item)} loading="lazy" />
                   </span>
                   <span className="detail-media-card__meta">
                     <strong>{title}</strong>
@@ -603,8 +622,8 @@ export function SubjectDetailPage() {
           </div>
           {hasMoreMediaItems ? (
             <div className="detail-section__footer">
-              <button type="button" className="detail-more-button" onClick={() => setVisibleMediaCount((count) => count + 4)}>
-                查看更多
+              <button type="button" className="detail-more-button" onClick={() => setVisibleMediaCount(mediaItems.length)}>
+                查看全部
               </button>
             </div>
           ) : null}
@@ -660,8 +679,8 @@ export function SubjectDetailPage() {
           </div>
           {hasMoreRelatedSubjects ? (
             <div className="detail-section__footer">
-              <button type="button" className="detail-more-button" onClick={() => setVisibleRelatedCount((count) => count + relatedLoadMoreStep)}>
-                查看更多
+              <button type="button" className="detail-more-button" onClick={() => setVisibleRelatedCount(relatedSubjects.length)}>
+                查看全部
               </button>
             </div>
           ) : null}
@@ -691,7 +710,7 @@ export function SubjectDetailPage() {
                     <strong>{comment.author ?? "豆瓣用户"}</strong>
                     <div className="comment-card__submeta">
                       <div className="comment-card__submeta-main">
-                        {renderStars(ratingLabelToScore(comment.rating))}
+                        {renderStars(ratingLabelToScore(comment.rating), { showEmpty: true })}
                         {comment.platform ? <span className="comment-card__platform">{comment.platform}</span> : null}
                       </div>
                       {comment.createdAt ? <time>{comment.createdAt}</time> : null}
@@ -700,7 +719,7 @@ export function SubjectDetailPage() {
                 </div>
                 <p>{comment.content}</p>
                 {comment.votes != null ? (
-                  hasDoubanSession && comment.id ? (
+                  hasDoubanSession && comment.id && (comment.userVoteState !== "voted" || comment.canCancelVote === true) ? (
                     <button
                       type="button"
                       className={`comment-card__votes comment-card__votes--button${comment.userVoteState === "voted" ? " is-active" : ""}`}
@@ -711,7 +730,9 @@ export function SubjectDetailPage() {
                       {comment.userVoteState === "voted" ? "♥" : "♡"} {comment.votes}
                     </button>
                   ) : (
-                    <span className="comment-card__votes">♡ {comment.votes}</span>
+                    <span className={`comment-card__votes${comment.userVoteState === "voted" ? " comment-card__votes--active" : ""}`}>
+                      {comment.userVoteState === "voted" ? "♥" : "♡"} {comment.votes}
+                    </span>
                   )
                 ) : null}
               </article>
