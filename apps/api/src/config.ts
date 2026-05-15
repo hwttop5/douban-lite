@@ -1,5 +1,7 @@
 import { join } from "node:path";
 
+export type DeploymentMode = "standard" | "render-demo";
+
 export interface AppConfig {
   port: number;
   allowedOrigin: string | null;
@@ -18,6 +20,17 @@ export interface AppConfig {
   sessionTtlDays: number;
   publicSignupMode: "open";
   nodeEnv: string;
+  deploymentMode: DeploymentMode;
+}
+
+function parseDeploymentMode(value: string | undefined): DeploymentMode {
+  if (value == null || value === "standard") {
+    return "standard";
+  }
+  if (value === "render-demo") {
+    return "render-demo";
+  }
+  throw new Error(`Unsupported DEPLOYMENT_MODE: ${value}`);
 }
 
 export function loadConfig(env = process.env): AppConfig {
@@ -44,6 +57,7 @@ export function loadConfig(env = process.env): AppConfig {
     appSecret,
     sessionTtlDays: Number(env.SESSION_TTL_DAYS ?? 30),
     publicSignupMode: "open",
-    nodeEnv
+    nodeEnv,
+    deploymentMode: parseDeploymentMode(env.DEPLOYMENT_MODE)
   };
 }

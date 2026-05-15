@@ -19,6 +19,9 @@ export const timelineScopes = ["following", "mine"] as const;
 export type TimelineScope = (typeof timelineScopes)[number];
 export const timelinePageSize = 20;
 
+export const deploymentModes = ["standard", "render-demo"] as const;
+export type DeploymentMode = (typeof deploymentModes)[number];
+
 export type RankingBoardSource =
   | "html_list"
   | "movie_showing"
@@ -155,6 +158,13 @@ export interface AuthMeResponse {
   authenticated: boolean;
   user: AppUser | null;
   sessionStatus: DoubanSessionStatus;
+}
+
+export interface HealthResponse {
+  status: "ok";
+  app: "douban-lite";
+  schedulerEnabled: boolean;
+  deploymentMode: DeploymentMode;
 }
 
 export interface DoubanLoginResponse {

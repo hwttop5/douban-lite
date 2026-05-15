@@ -47,9 +47,28 @@ function createAuthMeResponse(status: AuthMeResponse["sessionStatus"]["status"])
   };
 }
 
-function renderSettingsPage(authMe: AuthMeResponse, options: { initialEntry?: string; initialEntries?: string[]; initialIndex?: number } = {}) {
-  const { initialEntry = "/settings", initialEntries, initialIndex } = options;
+function renderSettingsPage(
+  authMe: AuthMeResponse,
+  options: {
+    initialEntry?: string;
+    initialEntries?: string[];
+    initialIndex?: number;
+    health?: Awaited<ReturnType<typeof api.getHealth>>;
+  } = {}
+) {
+  const {
+    initialEntry = "/settings",
+    initialEntries,
+    initialIndex,
+    health = {
+      status: "ok" as const,
+      app: "douban-lite" as const,
+      schedulerEnabled: false,
+      deploymentMode: "standard" as const
+    }
+  } = options;
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
+  vi.spyOn(api, "getHealth").mockResolvedValue(health);
   vi.spyOn(api, "logoutDoubanSession").mockResolvedValue({
     status: "missing"
   });
@@ -145,6 +164,19 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("我的页")).toBeInTheDocument();
     });
+  });
+
+  it("shows the free Render warning for render-demo deployments", async () => {
+    renderSettingsPage(createAuthMeResponse("valid"), {
+      health: {
+        status: "ok",
+        app: "douban-lite",
+        schedulerEnabled: false,
+        deploymentMode: "render-demo"
+      }
+    });
+
+    expect(await screen.findByText(api.RENDER_DEMO_WARNING_MESSAGE)).toBeInTheDocument();
   });
 
   it("falls back to /me when opened directly and the back button has no in-app history", async () => {

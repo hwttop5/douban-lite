@@ -168,6 +168,23 @@ npm start
 
 仓库内已经包含 `render.yaml`，可用于部署 Node Web Service。
 
+### Render Free 自用部署
+
+- 当前仓库默认采用 `单个 Render Free Web Service` 部署，前后端不拆分。
+- Render 直接运行现有 Node 进程：构建命令为 `npm ci && npm run build`，启动命令为 `npm start`。
+- API 继续托管 `apps/web/dist` 的前端静态产物，前端通过同源 `/api` 与后端通信，不需要额外设置 `VITE_API_BASE_URL`。
+
+免费版限制：
+
+- `render.yaml` 会把 `DEPLOYMENT_MODE` 设为 `render-demo`，并强制 `DISABLE_AUTO_SYNC=true`，因此不会依赖 Render Free 上不稳定的定时同步。
+- `DATA_DIR=./data` 仍然指向 Render 实例本地文件系统，这个目录是临时的；服务重建、重新部署或实例替换后，SQLite 数据可能丢失。
+- Render Free 会休眠，首次访问可能出现冷启动延迟。这个模式只适合“先上线、先自用、可随时重建”。
+
+后续迁移方向：
+
+- 如果后面需要正式长期使用，优先迁移到带持久磁盘的服务器或支持持久卷的平台。
+- 到正式环境时，保持同一套应用结构即可，再补 Docker / Compose、备份和迁移脚本，不需要先为免费版重构数据库或拆前后端。
+
 重要限制：
 
 - SQLite 必须放在持久化存储上，才适合真实的多用户使用

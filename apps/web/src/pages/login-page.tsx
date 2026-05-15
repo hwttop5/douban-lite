@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
-import { proxiedImageUrl } from "../api";
+import { getHealth, proxiedImageUrl, RENDER_DEMO_WARNING_MESSAGE } from "../api";
 import { LoadingButtonLabel, LoadingInline, PanelLoading } from "../components/loading-state";
 import { getProxyErrorTone, getProxyMessageTone, useDoubanLoginController } from "../hooks/use-douban-login-controller";
 import { resolveLoginSuccessPath } from "../login-routing";
@@ -78,6 +79,11 @@ export function LoginPage() {
   const controller = useDoubanLoginController({
     onAuthenticated: () => navigate(postLoginPath, { replace: true })
   });
+  const healthQuery = useQuery({
+    queryKey: ["health"],
+    queryFn: getHealth,
+    retry: false
+  });
 
   const auth = controller.authQuery.data;
   const sessionStatus = auth?.sessionStatus.status ?? "missing";
@@ -91,6 +97,7 @@ export function LoginPage() {
   const qrMessage = qrResult?.message ?? null;
   const qrMessageTone = getProxyMessageTone(qrResult);
   const qrImageSrc = proxiedImageUrl(controller.currentQrCodeImageUrl);
+  const showRenderDemoWarning = healthQuery.data?.deploymentMode === "render-demo";
 
   useEffect(() => {
     if (didAutoStartQr || !isQrAvailable) {
@@ -221,6 +228,7 @@ export function LoginPage() {
 
           {activeTab === "cookie" ? (
             <div className="settings-auth-panel settings-auth-panel--cookie">
+              {showRenderDemoWarning ? <p className="notice">{RENDER_DEMO_WARNING_MESSAGE}</p> : null}
               <p className="notice notice--subtle">适合代理登录遇到图片验证、切换账号或刷新会话时使用。</p>
               <label className="field">
                 <span>Cookie</span>

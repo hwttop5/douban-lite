@@ -23,5 +23,7 @@ services:
         value: https://www.douban.com
       - key: SYNC_INTERVAL_HOURS
         value: "12"
+      - key: DEPLOYMENT_MODE
+        value: render-demo
       - key: DISABLE_AUTO_SYNC
-        value: "false"
+        value: "true"

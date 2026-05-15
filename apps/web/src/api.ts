@@ -5,6 +5,7 @@ import type {
   DoubanProxyLoginStatusResponse,
   DoubanProxyLoginSubmitResponse,
   DoubanSessionStatus,
+  HealthResponse,
   LibraryResponse,
   Medium,
   OverviewResponse,
@@ -24,6 +25,8 @@ import type {
 } from "../../../packages/shared/src";
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+export const RENDER_DEMO_WARNING_MESSAGE =
+  "这是免费实例；服务会休眠；本地 SQLite 不持久；重启或重新部署后数据可能丢失；不建议长期保存重要数据。";
 
 export function proxiedImageUrl(url: string | null | undefined) {
   if (!url) {
@@ -224,6 +227,10 @@ export function getDoubanSessionStatus() {
 
 export function getAuthMe() {
   return request<AuthMeResponse>("/api/session/me");
+}
+
+export function getHealth() {
+  return request<HealthResponse>("/health");
 }
 
 export function triggerManualSync() {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   getAuthMe,
+  getHealth,
   getDoubanProxyLoginConfig,
   getDoubanProxyLoginStatus,
   importDoubanSession,
@@ -32,6 +33,7 @@ describe("auth-related API routes", () => {
     await importDoubanSession("dbcl2=fake; ck=test;");
     await logoutDoubanSession();
     await getAuthMe();
+    await getHealth();
     await getDoubanProxyLoginConfig();
     await startDoubanProxyLogin();
     await startDoubanProxyQrLogin({ loginAttemptId: "attempt-1" });
@@ -51,13 +53,14 @@ describe("auth-related API routes", () => {
       expect.objectContaining({ method: "POST" })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session/me", expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/auth/douban/proxy/config", expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/auth/douban/proxy/start", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/auth/douban/proxy/qr/start", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/auth/douban/proxy/attempt-1/status", expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/auth/douban/proxy/sms/send", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(9, "/api/auth/douban/proxy/sms/verify", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(10, "/api/auth/douban/proxy/password", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/health", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/auth/douban/proxy/config", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/auth/douban/proxy/start", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/auth/douban/proxy/qr/start", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/auth/douban/proxy/attempt-1/status", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(9, "/api/auth/douban/proxy/sms/send", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(10, "/api/auth/douban/proxy/sms/verify", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(11, "/api/auth/douban/proxy/password", expect.objectContaining({ method: "POST" }));
   });
 
   it("maps HTML error pages to a proxy-target diagnostic", async () => {

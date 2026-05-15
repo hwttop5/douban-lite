@@ -179,7 +179,8 @@ export function createApp(overrides?: Partial<AppConfig>): AppContext {
     response.json({
       status: "ok",
       app: "douban-lite",
-      schedulerEnabled: !config.disableAutoSync
+      schedulerEnabled: !config.disableAutoSync,
+      deploymentMode: config.deploymentMode
     });
   });
 

@@ -151,6 +151,12 @@ function renderLoginPage({
   initialEntries,
   initialIndex,
   authMe = createAuthMeResponse("missing"),
+  health = {
+    status: "ok" as const,
+    app: "douban-lite" as const,
+    schedulerEnabled: false,
+    deploymentMode: "standard" as const
+  },
   proxyConfig = defaultProxyConfig,
   qrStartResults = [createQrStartResult()],
   qrStatusResults = [createQrStatusResult()]
@@ -159,11 +165,13 @@ function renderLoginPage({
   initialEntries?: string[];
   initialIndex?: number;
   authMe?: AuthMeResponse;
+  health?: Awaited<ReturnType<typeof api.getHealth>>;
   proxyConfig?: DoubanProxyLoginConfigResponse;
   qrStartResults?: DoubanProxyLoginStatusResponse[];
   qrStatusResults?: DoubanProxyLoginSubmitResponse[];
 } = {}) {
   vi.spyOn(api, "getAuthMe").mockResolvedValue(authMe);
+  vi.spyOn(api, "getHealth").mockResolvedValue(health);
   vi.spyOn(api, "getDoubanProxyLoginConfig").mockResolvedValue(proxyConfig);
   vi.spyOn(api, "startDoubanProxyLogin").mockResolvedValue(createProxyAttemptResult());
   const qrStartSpy = vi.spyOn(api, "startDoubanProxyQrLogin").mockImplementation(mockSequentialResult(qrStartResults));
@@ -359,6 +367,20 @@ describe("LoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "导入并登录" }));
 
     expect(await screen.findByText("已回到详情页")).toBeInTheDocument();
+  });
+
+  it("shows the free Render warning in the Cookie import area for render-demo deployments", async () => {
+    renderLoginPage({
+      health: {
+        status: "ok",
+        app: "douban-lite",
+        schedulerEnabled: false,
+        deploymentMode: "render-demo"
+      }
+    });
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Cookie/ }));
+    expect(screen.getByText(api.RENDER_DEMO_WARNING_MESSAGE)).toBeInTheDocument();
   });
 
   it("falls back to /me when returnTo is missing or invalid", async () => {

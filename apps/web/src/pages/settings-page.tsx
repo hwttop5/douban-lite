@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { DoubanSessionStatus, SyncJobRecord } from "../../../../packages/shared/src";
-import { getAuthMe, getSyncJob, logoutDoubanSession, triggerManualSync } from "../api";
+import { getAuthMe, getHealth, getSyncJob, logoutDoubanSession, RENDER_DEMO_WARNING_MESSAGE, triggerManualSync } from "../api";
 import { useAppContext } from "../app-context";
 import { LoadingButtonLabel, LoadingInline, PanelLoading } from "../components/loading-state";
 import { buildLoginPath, getRelativeLocation } from "../login-routing";
@@ -48,9 +48,15 @@ export function SettingsPage() {
     queryFn: getAuthMe,
     retry: false
   });
+  const healthQuery = useQuery({
+    queryKey: ["health"],
+    queryFn: getHealth,
+    retry: false
+  });
 
   const auth = statusQuery.data;
   const sessionStatus = auth?.sessionStatus.status ?? "missing";
+  const showRenderDemoWarning = healthQuery.data?.deploymentMode === "render-demo";
 
   const logoutMutation = useMutation({
     mutationFn: logoutDoubanSession,
@@ -124,6 +130,7 @@ export function SettingsPage() {
       <div className="settings-page__content">
         <div className="settings-page__column">
           <section className="panel settings-session-panel">
+            {showRenderDemoWarning ? <p className="notice">{RENDER_DEMO_WARNING_MESSAGE}</p> : null}
             <div className="panel__header">
               <div>
                 <strong>豆瓣会话状态</strong>

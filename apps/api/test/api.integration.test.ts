@@ -36,6 +36,41 @@ describe("API integration", () => {
     rmSync(dbFile, { force: true });
   });
 
+  it("reports deployment mode and scheduler state from /health", async () => {
+    const standardHealth = await request(context.app).get("/health").expect(200);
+    expect(standardHealth.body).toEqual({
+      status: "ok",
+      app: "douban-lite",
+      schedulerEnabled: false,
+      deploymentMode: "standard"
+    });
+
+    const demoDbFile = join(tmpdir(), `douban-lite-demo-${randomUUID()}.db`);
+    const demoContext = createApp({
+      databaseFile: demoDbFile,
+      dataDir: tmpdir(),
+      doubanAccountsBaseUrl: mock.url,
+      doubanPublicBaseUrl: mock.url,
+      doubanWebBaseUrl: mock.url,
+      disableAutoSync: true,
+      deploymentMode: "render-demo",
+      allowedOrigin: null
+    });
+
+    try {
+      const demoHealth = await request(demoContext.app).get("/health").expect(200);
+      expect(demoHealth.body).toEqual({
+        status: "ok",
+        app: "douban-lite",
+        schedulerEnabled: false,
+        deploymentMode: "render-demo"
+      });
+    } finally {
+      demoContext.close();
+      rmSync(demoDbFile, { force: true });
+    }
+  });
+
   it("imports a douban session and performs a manual sync including games", async () => {
     await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
 
