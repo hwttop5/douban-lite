@@ -1,0 +1,308 @@
+- main [ref=e4]:
+  - generic [ref=e38]:
+    - button "返回" [ref=e39] [cursor=pointer]:
+      - generic [ref=e40]: ‹
+    - button "分享" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic [ref=e48]:
+      - img "Viva La Vida" [ref=e50]
+      - generic [ref=e51]:
+        - heading "Viva La Vida" [level=1] [ref=e52]
+        - paragraph [ref=e53]: "音乐 / 又名: Death And All His Friends 表演者: Coldplay 流派: 摇滚 专辑类型: 专辑 介质: CD 发行时间: 2008-06-17 出版者: Capitol 唱片数: 1 条形码: 5099921688607 ISRC(中国): CNE080666400 其他版本: Viva la Vida （全部）"
+      - generic "收藏状态" [ref=e54]:
+        - button "⊕想听" [ref=e55] [cursor=pointer]
+        - button "⊙在听" [ref=e56] [cursor=pointer]
+        - button "☆听过" [ref=e57] [cursor=pointer]
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - text: 豆瓣评分
+          - generic [ref=e61]:
+            - strong [ref=e62]: "9.0"
+            - generic "5 星" [ref=e63]:
+              - generic [ref=e64]: ★★★★★
+          - paragraph [ref=e65]: 来自豆瓣公开评分
+        - generic [ref=e66]:
+          - generic [ref=e67]: 我的评分
+          - generic "我的评分" [ref=e68]:
+            - button "1 星" [ref=e69] [cursor=pointer]: ★
+            - button "2 星" [ref=e70] [cursor=pointer]: ★
+            - button "3 星" [ref=e71] [cursor=pointer]: ★
+            - button "4 星" [ref=e72] [cursor=pointer]: ★
+            - button "5 星" [ref=e73] [cursor=pointer]: ★
+          - strong [ref=e75]: 听过
+      - paragraph [ref=e76]: 当前：听过 · 已同步
+    - generic [ref=e77]:
+      - heading "剧情简介" [level=2] [ref=e78]
+      - paragraph [ref=e79]: 专辑的名字来自一位墨西哥艺术家Frida Kahlo给自己的一幅画的命名。 在这张专辑制作的早期，三名乐队成员各自把对新专辑的想法都写在一张白板上，每一个人的想法都很激进前卫，最后，Chris Martin收回了他的看法。他希望以后有机会再游说他们。"我听到波诺曾经说过一句话，'乐队不应该为钱而分裂，他们应该只为了歌曲名单而分裂，'”他说，在这一点上，没有什么比这更有针对性了。” 乐队聘请了传奇制片人Brian Eno做他们第4张专辑的制作人。并且，他们有针对性地试图排除一切外来影响。吉他手Johnny Buckland说： "我们感觉自己的头三张专辑是一个三部曲，我们已经完成了。因此，我们想要做一些不同的。" 乐队让记者听了一下他们正在制作的歌曲小样，大多数听起来令人耳目一新， 完全不同于他们以往的热门歌曲“Clocks... (展开全部) 专辑的名字来自一位墨西哥艺术家Frida Kahlo给自己的一幅画的命名。 在这张专辑制作的早期，三名乐队成员各自把对新专辑的想法都写在一张白板上，每一个人的想法都很激进前卫，最后，Chris Martin收回了他的看法。他希望以后有机会再游说他们。"我听到波诺曾经说过一句话，'乐队不应该为钱而分裂，他们应该只为了歌曲名单而分裂，'”他说，在这一点上，没有什么比这更有针对性了。” 乐队聘请了传奇制片人Brian Eno做他们第4张专辑的制作人。并且，他们有针对性地试图排除一切外来影响。吉他手Johnny Buckland说： "我们感觉自己的头三张专辑是一个三部曲，我们已经完成了。因此，我们想要做一些不同的。" 乐队让记者听了一下他们正在制作的歌曲小样，大多数听起来令人耳目一新， 完全不同于他们以往的热门歌曲“Clocks”和“Speed Of Sound”。 好几首歌相当粗糙靠近边缘，伴随着扭曲的吉他和更加突出的敲击。歌词是暗色调的，反复出现了死亡和孤独的主题。其中有几首歌，Martin延长他的声带调色板，其表现大大超出了人们对他以往运用假声的理解，其音色低沉，性感，给人的感觉更个人，更真实。"不管这样好还是不好，我们已经开始在音乐里融入更多的色彩。”Martin说。 "取悦每一个人是不可能做到的，我们经历了这么长时间才体会到这一点。这样说让人觉得自由——可能没有一个人喜欢我们做的这些东西，但我们此时此刻就是想这样做，而且要把它做完为止。” 在新专辑里，乐队探索了各种声波的方向，其中一些来自制作人呢Brain Eno的启发和鼓励。"他不主观臆断，做出来的东西令人耳目一新。”Matin说。Buckland补充说， "他不仅仅是带来声音或其他东西，他带来了对一切事情的想法，甚至具体到，怎样构筑我们渡过的这一天。他的建议让我们停下来，仔细考虑很多问题。”
+    - generic [ref=e80]:
+      - heading "曲目" [level=2] [ref=e82]
+      - list [ref=e83]:
+        - listitem [ref=e84]: Life in Technicolor
+        - listitem [ref=e85]: Cemeteries Of London
+        - listitem [ref=e86]: Lost!
+        - listitem [ref=e87]: Lovers in Japan/Reign of Life
+        - listitem [ref=e88]: Yes!
+        - listitem [ref=e89]: Viva la Vida
+        - listitem [ref=e90]: Violet Hill
+        - listitem [ref=e91]: Strawberry Swing
+        - listitem [ref=e92]: Death and All His Friends
+    - generic [ref=e93]:
+      - heading "喜欢听此专辑的人也喜欢" [level=2] [ref=e95]
+      - generic [ref=e96]:
+        - 'link "Parachutes Parachutes 豆瓣 9.1 · 又名: 降落伞 表演者: Coldplay 流派: 摇滚 专辑类型: 专辑 介质: CD 发行时间: 2000-07-10 出版者: EMI 唱片数: 1 条形码: 0724352778324 ISRC(中国): CNA010130800 其他版本: Parachutes （全部）" [ref=e97] [cursor=pointer]':
+          - /url: /subject/music/1463061
+          - img "Parachutes" [ref=e99]
+          - generic [ref=e100]:
+            - heading "Parachutes" [level=3] [ref=e102]
+            - paragraph [ref=e103]: "豆瓣 9.1 · 又名: 降落伞 表演者: Coldplay 流派: 摇滚 专辑类型: 专辑 介质: CD 发行时间: 2000-07-10 出版者: EMI 唱片数: 1 条形码: 0724352778324 ISRC(中国): CNA010130800 其他版本: Parachutes （全部）"
+        - 'link "X&Y X&Y 豆瓣 8.6 · 又名: 染色体 表演者: Coldplay 流派: 摇滚 专辑类型: 专辑 介质: CD 发行时间: 2005-06-07 出版者: Capitol 唱片数: 1 条形码: 0724347478628 ISRC(中国): CNA260543200 其他版本: X&Y （全部）" [ref=e104] [cursor=pointer]':
+          - /url: /subject/music/1394600
+          - img "X&Y" [ref=e106]
+          - generic [ref=e107]:
+            - heading "X&Y" [level=3] [ref=e109]
+            - paragraph [ref=e110]: "豆瓣 8.6 · 又名: 染色体 表演者: Coldplay 流派: 摇滚 专辑类型: 专辑 介质: CD 发行时间: 2005-06-07 出版者: Capitol 唱片数: 1 条形码: 0724347478628 ISRC(中国): CNA260543200 其他版本: X&Y （全部）"
+        - 'link "Yellow Yellow 豆瓣 9.5 · 又名: 黄色 表演者: Coldplay 流派: 摇滚 专辑类型: EP 介质: Audio CD 发行时间: 2000-07-03 出版者: EMI Int''l 唱片数: 1 条形码: 0724388907729" [ref=e111] [cursor=pointer]':
+          - /url: /subject/music/1458367
+          - img "Yellow" [ref=e113]
+          - generic [ref=e114]:
+            - heading "Yellow" [level=3] [ref=e116]
+            - paragraph [ref=e117]: "豆瓣 9.5 · 又名: 黄色 表演者: Coldplay 流派: 摇滚 专辑类型: EP 介质: Audio CD 发行时间: 2000-07-03 出版者: EMI Int'l 唱片数: 1 条形码: 0724388907729"
+        - 'link "American Idiot American Idiot 豆瓣 9.0 · 表演者: Green Day 流派: 摇滚 专辑类型: Explicit Lyrics 介质: Audio CD 发行时间: 2004-09-21 出版者: Wea Japan 唱片数: 1 条形码: 0093624877721" [ref=e118] [cursor=pointer]':
+          - /url: /subject/music/1396380
+          - img "American Idiot" [ref=e120]
+          - generic [ref=e121]:
+            - heading "American Idiot" [level=3] [ref=e123]
+            - paragraph [ref=e124]: "豆瓣 9.0 · 表演者: Green Day 流派: 摇滚 专辑类型: Explicit Lyrics 介质: Audio CD 发行时间: 2004-09-21 出版者: Wea Japan 唱片数: 1 条形码: 0093624877721"
+      - button "查看更多" [ref=e126] [cursor=pointer]
+    - generic [ref=e127]:
+      - heading "短评" [level=2] [ref=e130]
+      - generic [ref=e131]:
+        - article [ref=e132]:
+          - generic [ref=e133]:
+            - img "tlmgt" [ref=e134]
+            - generic [ref=e135]:
+              - strong [ref=e136]: tlmgt
+              - generic [ref=e137]:
+                - generic "2 星" [ref=e139]:
+                  - generic [ref=e140]: ★★
+                  - generic [ref=e141]: ★★★
+                - time [ref=e142]: 2014-04-19 22:13:11
+          - paragraph [ref=e143]: Brian Eno做制作人也没看到什么明显改变。另外乐评区真是恶心透了
+          - button "投票" [ref=e144] [cursor=pointer]: ♡ 174
+        - article [ref=e145]:
+          - generic [ref=e146]:
+            - img "文泽尔" [ref=e147]
+            - generic [ref=e148]:
+              - strong [ref=e149]: 文泽尔
+              - generic [ref=e150]:
+                - generic "3 星" [ref=e152]:
+                  - generic [ref=e153]: ★★★
+                  - generic [ref=e154]: ★★
+                - time [ref=e155]: 2008-06-17 21:19:18
+          - paragraph [ref=e156]: 酷玩逐渐泯然众人了.相比这张更喜欢yellow
+          - button "投票" [ref=e157] [cursor=pointer]: ♡ 159
+        - article [ref=e158]:
+          - generic [ref=e159]:
+            - img "潋 | Béatrice" [ref=e160]
+            - generic [ref=e161]:
+              - strong [ref=e162]: 潋 | Béatrice
+              - generic [ref=e163]:
+                - generic "5 星" [ref=e165]:
+                  - generic [ref=e166]: ★★★★★
+                - time [ref=e167]: 2011-01-24 12:32:53
+          - paragraph [ref=e168]: Viva La Vida……感动……
+          - button "投票" [ref=e169] [cursor=pointer]: ♡ 116
+        - article [ref=e170]:
+          - generic [ref=e171]:
+            - img "Alain" [ref=e172]
+            - generic [ref=e173]:
+              - strong [ref=e174]: Alain
+              - generic [ref=e175]:
+                - generic "5 星" [ref=e177]:
+                  - generic [ref=e178]: ★★★★★
+                - time [ref=e179]: 2016-05-10 19:44:36
+          - paragraph [ref=e180]: 较之前三专割裂性太过明显，不仅是制作上的趋于精良而给人造成的商业化太严重的直觉，揉杂了奇怪的异域风情和东方元素，连同着马丁原本丧气的唱腔变得浑圆饱满起来，连抒情慢歌都朝着流行芭乐那一套靠近。可能是生命万岁的主题太过宏大，你很难再找到那种废柴之间的嘲弄与怜悯，它就像封面上的自由女神掀起了救赎狂潮，大步流星地带领着你往前走，有着让人老泪纵横的感染力。如果说之前的hit曲都只适合关上房门戴上耳机一个人摇头晃脑从天黑听到天亮，那么这专的同名hit则是在万人大合唱时全场呐喊流泪着唱完的。激昂过后，Violet Hill迅疾坠落至黑暗深渊，让你错觉这是生命万岁之后的沉重死亡。值得一提的是，Lost!与Lost?两首，同样的旋律因为编曲的大相径庭而呈现出不同样貌。
+          - button "投票" [ref=e181] [cursor=pointer]: ♡ 26
+        - article [ref=e182]:
+          - generic [ref=e183]:
+            - img "virgin" [ref=e184]
+            - generic [ref=e185]:
+              - strong [ref=e186]: virgin
+              - generic [ref=e187]:
+                - generic "5 星" [ref=e189]:
+                  - generic [ref=e190]: ★★★★★
+                - time [ref=e191]: 2009-01-29 17:05:08
+          - paragraph [ref=e192]: WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!WoW!!于二零一零年五月三日收到原盘@草莓!!哈哈哈:)。。
+          - button "投票" [ref=e193] [cursor=pointer]: ♡ 16
+        - article [ref=e194]:
+          - generic [ref=e195]:
+            - img "L I M O" [ref=e196]
+            - generic [ref=e197]:
+              - strong [ref=e198]: L I M O
+              - generic [ref=e199]:
+                - generic "5 星" [ref=e201]:
+                  - generic [ref=e202]: ★★★★★
+                - time [ref=e203]: 2008-06-09 22:41:50
+          - paragraph [ref=e204]: 酷玩萬歲。
+          - button "投票" [ref=e205] [cursor=pointer]: ♡ 19
+        - article [ref=e206]:
+          - generic [ref=e207]:
+            - img "PabloHoney" [ref=e208]
+            - generic [ref=e209]:
+              - strong [ref=e210]: PabloHoney
+              - generic [ref=e211]:
+                - generic "5 星" [ref=e213]:
+                  - generic [ref=e214]: ★★★★★
+                - time [ref=e215]: 2008-06-05 13:09:56
+          - paragraph [ref=e216]: 整体优于上一张，但还不及前两张给我的感动...
+          - button "投票" [ref=e217] [cursor=pointer]: ♡ 7
+        - article [ref=e218]:
+          - generic [ref=e219]:
+            - img "zard砸得王大崩" [ref=e220]
+            - generic [ref=e221]:
+              - strong [ref=e222]: zard砸得王大崩
+              - generic [ref=e223]:
+                - generic "5 星" [ref=e225]:
+                  - generic [ref=e226]: ★★★★★
+                - time [ref=e227]: 2010-06-30 13:46:07
+          - paragraph [ref=e228]: viva la coldplay
+          - button "投票" [ref=e229] [cursor=pointer]: ♡ 6
+        - article [ref=e230]:
+          - generic [ref=e231]:
+            - img "王韧勉" [ref=e232]
+            - generic [ref=e233]:
+              - strong [ref=e234]: 王韧勉
+              - generic [ref=e235]:
+                - generic "2 星" [ref=e237]:
+                  - generic [ref=e238]: ★★
+                  - generic [ref=e239]: ★★★
+                - time [ref=e240]: 2008-11-16 20:17:41
+          - paragraph [ref=e241]: 这张太烂
+          - button "投票" [ref=e242] [cursor=pointer]: ♡ 5
+        - article [ref=e243]:
+          - generic [ref=e244]:
+            - img "Song³" [ref=e245]
+            - generic [ref=e246]:
+              - strong [ref=e247]: Song³
+              - generic [ref=e248]:
+                - generic "5 星" [ref=e250]:
+                  - generic [ref=e251]: ★★★★★
+                - time [ref=e252]: 2008-10-27 22:21:03
+          - paragraph [ref=e253]: 革命性。Life In Technicolor / Viva La Vida
+          - button "投票" [ref=e254] [cursor=pointer]: ♡ 10
+        - article [ref=e255]:
+          - generic [ref=e256]:
+            - img "金蛇郎君" [ref=e257]
+            - generic [ref=e258]:
+              - strong [ref=e259]: 金蛇郎君
+              - generic [ref=e260]:
+                - generic "1 星" [ref=e262]:
+                  - generic [ref=e263]: ★
+                  - generic [ref=e264]: ★★★★
+                - time [ref=e265]: 2017-03-29 16:18:12
+          - paragraph [ref=e266]: 客观来说如果Viva La Vida不抄袭老乔的“If I Could Fly”，我给3星，抄了就是1星，哪怕不是全抄，抄了那么一段。更可悲的是一大堆专业人士来分析只是很像，没有抄袭，就算剽窃了一个乐句又有何妨，大哥，那是Joe曲子里的主乐句，Coldplay直接粘贴唱出来了好嘛？！药店逼脸
+          - button "投票" [ref=e267] [cursor=pointer]: ♡ 13
+        - article [ref=e268]:
+          - generic [ref=e269]:
+            - img "陀螺凡达可" [ref=e270]
+            - generic [ref=e271]:
+              - strong [ref=e272]: 陀螺凡达可
+              - generic [ref=e273]:
+                - generic "5 星" [ref=e275]:
+                  - generic [ref=e276]: ★★★★★
+                - time [ref=e277]: 2014-03-31 18:21:13
+          - paragraph [ref=e278]: ★★★★★★★★★★★★★★★★★★★★★★★★★
+          - button "投票" [ref=e279] [cursor=pointer]: ♡ 14
+        - article [ref=e280]:
+          - generic [ref=e281]:
+            - img "令糊葱" [ref=e282]
+            - generic [ref=e283]:
+              - strong [ref=e284]: 令糊葱
+              - generic [ref=e285]:
+                - generic "5 星" [ref=e287]:
+                  - generic [ref=e288]: ★★★★★
+                - time [ref=e289]: 2008-07-20 16:55:06
+          - paragraph [ref=e290]: 认识的一个英国妞说不错。
+          - button "投票" [ref=e291] [cursor=pointer]: ♡ 8
+        - article [ref=e292]:
+          - generic [ref=e293]:
+            - img "陈姓阿姨" [ref=e294]
+            - generic [ref=e295]:
+              - strong [ref=e296]: 陈姓阿姨
+              - generic [ref=e297]:
+                - generic "2 星" [ref=e299]:
+                  - generic [ref=e300]: ★★
+                  - generic [ref=e301]: ★★★
+                - time [ref=e302]: 2011-08-28 12:44:24
+          - paragraph [ref=e303]: 这张很不好
+          - button "投票" [ref=e304] [cursor=pointer]: ♡ 5
+        - article [ref=e305]:
+          - generic [ref=e306]:
+            - generic [ref=e307]: B
+            - generic [ref=e308]:
+              - strong [ref=e309]: Bill
+              - generic [ref=e310]:
+                - generic "5 星" [ref=e312]:
+                  - generic [ref=e313]: ★★★★★
+                - time [ref=e314]: 2009-02-12 16:19:29
+          - paragraph [ref=e315]: 有概念有创意 歌词华丽 有想法是件多么简单却又多么受人推崇的一件事情 比较囧的一件事是第一次听到主打高潮前两小节很像黄立行《黑的意念》
+          - button "投票" [ref=e316] [cursor=pointer]: ♡ 4
+        - article [ref=e317]:
+          - generic [ref=e318]:
+            - img "今天小熊不吃糖" [ref=e319]
+            - generic [ref=e320]:
+              - strong [ref=e321]: 今天小熊不吃糖
+              - generic [ref=e322]:
+                - generic "5 星" [ref=e324]:
+                  - generic [ref=e325]: ★★★★★
+                - time [ref=e326]: 2008-08-09 12:02:20
+          - paragraph [ref=e327]: 喜欢，每次听心都会放得很大
+          - button "投票" [ref=e328] [cursor=pointer]: ♡ 6
+        - article [ref=e329]:
+          - generic [ref=e330]:
+            - generic [ref=e331]: 九
+            - generic [ref=e332]:
+              - strong [ref=e333]: 九月四日
+              - generic [ref=e334]:
+                - generic "3 星" [ref=e336]:
+                  - generic [ref=e337]: ★★★
+                  - generic [ref=e338]: ★★
+                - time [ref=e339]: 2009-02-18 00:27:48
+          - paragraph [ref=e340]: 你们是想做一张比Pink Floyd更装X的专辑？！
+          - button "投票" [ref=e341] [cursor=pointer]: ♡ 4
+        - article [ref=e342]:
+          - generic [ref=e343]:
+            - img "丶" [ref=e344]
+            - generic [ref=e345]:
+              - strong [ref=e346]: 丶
+              - generic [ref=e347]:
+                - generic "5 星" [ref=e349]:
+                  - generic [ref=e350]: ★★★★★
+                - time [ref=e351]: 2011-12-05 23:58:17
+          - paragraph [ref=e352]: 这是我最喜欢的coldplay的一张专辑。
+          - button "投票" [ref=e353] [cursor=pointer]: ♡ 2
+        - article [ref=e354]:
+          - generic [ref=e355]:
+            - img "åiden" [ref=e356]
+            - generic [ref=e357]:
+              - strong [ref=e358]: åiden
+              - generic [ref=e359]:
+                - generic "4 星" [ref=e361]:
+                  - generic [ref=e362]: ★★★★
+                  - generic [ref=e363]: ★
+                - time [ref=e364]: 2008-06-11 20:24:37
+          - paragraph [ref=e365]: Brian Eno could also not save Coldplay.And now what i realize is how i miss the malnourished young guy who singing "for you i bleed myself dry" by the sea...so why coldplay why
+          - button "投票" [ref=e366] [cursor=pointer]: ♡ 4
+        - article [ref=e367]:
+          - generic [ref=e368]:
+            - img "波波" [ref=e369]
+            - generic [ref=e370]:
+              - strong [ref=e371]: 波波
+              - generic [ref=e372]:
+                - generic "4 星" [ref=e374]:
+                  - generic [ref=e375]: ★★★★
+                  - generic [ref=e376]: ★
+                - time [ref=e377]: 2008-09-24 12:34:23
+          - paragraph [ref=e378]: 也就这样吧，偷咱们布勒的东西，弄了个不错的专
+          - button "投票" [ref=e379] [cursor=pointer]: ♡ 3

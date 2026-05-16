@@ -1,0 +1,192 @@
+- main [ref=e4]:
+  - generic [ref=e38]:
+    - button "返回" [ref=e39] [cursor=pointer]:
+      - generic [ref=e40]: ‹
+    - button "分享" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic [ref=e48]:
+      - 'img "巫师3：狂猎 The Witcher 3: Wild Hunt" [ref=e50]'
+      - generic [ref=e51]:
+        - 'heading "巫师3：狂猎 The Witcher 3: Wild Hunt" [level=1] [ref=e52]'
+        - paragraph [ref=e53]: 游戏
+      - generic "收藏状态" [ref=e54]:
+        - button "⊕想玩" [ref=e55] [cursor=pointer]
+        - button "⊙在玩" [ref=e56] [cursor=pointer]
+        - button "☆玩过" [ref=e57] [cursor=pointer]
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - text: 豆瓣评分
+          - generic [ref=e61]:
+            - strong [ref=e62]: "9.5"
+            - generic "5 星" [ref=e63]:
+              - generic [ref=e64]: ★★★★★
+          - paragraph [ref=e65]: 来自豆瓣公开评分
+        - generic [ref=e66]:
+          - generic [ref=e67]: 我的评分
+          - generic "我的评分" [ref=e68]:
+            - button "1 星" [ref=e69] [cursor=pointer]: ★
+            - button "2 星" [ref=e70] [cursor=pointer]: ★
+            - button "3 星" [ref=e71] [cursor=pointer]: ★
+            - button "4 星" [ref=e72] [cursor=pointer]: ★
+            - button "5 星" [ref=e73] [cursor=pointer]: ★
+          - generic [ref=e74]:
+            - strong [ref=e75]: 好好好
+            - generic [ref=e76]: 玩过 · 5 星
+      - paragraph [ref=e77]: 当前：玩过 · 5 星 · 已同步
+    - generic [ref=e78]:
+      - heading "剧情简介" [level=2] [ref=e79]
+      - paragraph [ref=e80]: 简介 · · · · · · 《巫师3：狂猎》将是三部曲系列的最后一作，故事将有宏大的最后结局，但并非《巫师》系列的最终作。本作采用最新的REDengine3引擎制作，玩家可以在无缝的世界里任意探索，采用非线性剧情的设定，整体规模是前作的30倍。
+    - generic [ref=e81]:
+      - heading "视频 / 图片" [level=2] [ref=e83]
+      - generic [ref=e84]:
+        - link "怎么又是开放世界(3)【巫师3：狂猎】十年游梦2015_哔哩哔哩bilibili_赛博朋克2077_游戏杂谈 怎么又是开放世界(3)【巫师3：狂猎】十年游梦2015_哔哩哔哩bilibili_赛博朋克2077_游戏杂谈 视频" [ref=e85] [cursor=pointer]:
+          - /url: https://www.douban.com/game/21355730/video/1109829/
+          - img "怎么又是开放世界(3)【巫师3：狂猎】十年游梦2015_哔哩哔哩bilibili_赛博朋克2077_游戏杂谈" [ref=e87]
+          - generic [ref=e88]:
+            - strong [ref=e89]: 怎么又是开放世界(3)【巫师3：狂猎】十年游梦2015_哔哩哔哩bilibili_赛博朋克2077_游戏杂谈
+            - generic [ref=e90]: 视频
+        - link "『巫师风云传15』“辛特拉幼狮”希里的成长史（一）_单机游戏热门视频 『巫师风云传15』“辛特拉幼狮”希里的成长史（一）_单机游戏热门视频 视频" [ref=e91] [cursor=pointer]:
+          - /url: https://www.douban.com/game/21355730/video/1106683/
+          - img "『巫师风云传15』“辛特拉幼狮”希里的成长史（一）_单机游戏热门视频" [ref=e93]
+          - generic [ref=e94]:
+            - strong [ref=e95]: 『巫师风云传15』“辛特拉幼狮”希里的成长史（一）_单机游戏热门视频
+            - generic [ref=e96]: 视频
+        - link "【魔改】《巫师3》次世代V4.03增加飞行魔法_哔哩哔哩bilibili 【魔改】《巫师3》次世代V4.03增加飞行魔法_哔哩哔哩bilibili 视频" [ref=e97] [cursor=pointer]:
+          - /url: https://www.douban.com/game/21355730/video/1096672/
+          - img "【魔改】《巫师3》次世代V4.03增加飞行魔法_哔哩哔哩bilibili" [ref=e99]
+          - generic [ref=e100]:
+            - strong [ref=e101]: 【魔改】《巫师3》次世代V4.03增加飞行魔法_哔哩哔哩bilibili
+            - generic [ref=e102]: 视频
+        - button "图片 图片 图片" [ref=e103] [cursor=pointer]:
+          - img "图片" [ref=e105]
+          - generic [ref=e106]:
+            - strong [ref=e107]: 图片
+            - generic [ref=e108]: 图片
+      - button "查看更多" [ref=e110] [cursor=pointer]
+    - generic [ref=e111]:
+      - heading "喜欢此游戏的人也喜欢" [level=2] [ref=e113]
+      - generic [ref=e114]:
+        - link "席德·梅尔的文明VI Sid Meier's Civilization VI 席德·梅尔的文明VI Sid Meier's Civilization VI 豆瓣 9.2 游戏 / 策略 PC / Mac / Linux / iPhone / iPad / Android / Nintendo Switch / PS4 / Xbox One Firaxis Games Aspyr Media, Inc. / 2K Games 2016-10-21" [ref=e115] [cursor=pointer]:
+          - /url: /subject/game/26791492
+          - img "席德·梅尔的文明VI Sid Meier's Civilization VI" [ref=e117]
+          - generic [ref=e118]:
+            - heading "席德·梅尔的文明VI Sid Meier's Civilization VI" [level=3] [ref=e120]
+            - paragraph [ref=e121]: 豆瓣 9.2
+            - generic [ref=e122]:
+              - generic [ref=e123]:
+                - generic [ref=e124]: 游戏 / 策略
+                - generic [ref=e125]: PC / Mac / Linux / iPhone / iPad / Android / Nintendo Switch / PS4 / Xbox One
+              - generic [ref=e126]:
+                - paragraph [ref=e127]: Firaxis Games
+                - paragraph [ref=e128]: Aspyr Media, Inc. / 2K Games
+                - paragraph [ref=e129]: 2016-10-21
+        - link "艾尔登法环 Elden Ring 艾尔登法环 Elden Ring 豆瓣 9.4 游戏 / 角色扮演 / 冒险 / 动作 PC / PS5 / XSX / PS4 / Xbox One FromSoftware, Inc. Bandai Namco Entertainment 2022-02-25" [ref=e130] [cursor=pointer]:
+          - /url: /subject/game/34261689
+          - img "艾尔登法环 Elden Ring" [ref=e132]
+          - generic [ref=e133]:
+            - heading "艾尔登法环 Elden Ring" [level=3] [ref=e135]
+            - paragraph [ref=e136]: 豆瓣 9.4
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - generic [ref=e139]: 游戏 / 角色扮演 / 冒险 / 动作
+                - generic [ref=e140]: PC / PS5 / XSX / PS4 / Xbox One
+              - generic [ref=e141]:
+                - paragraph [ref=e142]: FromSoftware, Inc.
+                - paragraph [ref=e143]: Bandai Namco Entertainment
+                - paragraph [ref=e144]: 2022-02-25
+        - link "辐射4 Fallout 4 辐射4 Fallout 4 豆瓣 8.6 游戏 / 第一人称射击 / 模拟 / 角色扮演 / 冒险 PC / PS4 / Xbox One Bethesda Game Studios Bethesda Softworks 2015-11-10" [ref=e145] [cursor=pointer]:
+          - /url: /subject/game/26417385
+          - img "辐射4 Fallout 4" [ref=e147]
+          - generic [ref=e148]:
+            - heading "辐射4 Fallout 4" [level=3] [ref=e150]
+            - paragraph [ref=e151]: 豆瓣 8.6
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - generic [ref=e154]: 游戏 / 第一人称射击 / 模拟 / 角色扮演 / 冒险
+                - generic [ref=e155]: PC / PS4 / Xbox One
+              - generic [ref=e156]:
+                - paragraph [ref=e157]: Bethesda Game Studios
+                - paragraph [ref=e158]: Bethesda Softworks
+                - paragraph [ref=e159]: 2015-11-10
+        - 'link "只狼：影逝二度 Sekiro: Shadows Die Twice 只狼：影逝二度 Sekiro: Shadows Die Twice 豆瓣 9.6 游戏 / 冒险 / 动作 PC / XSX / PS4 / Xbox One FromSoftware, Inc. Activision 2019-03-22" [ref=e160] [cursor=pointer]':
+          - /url: /subject/game/30245105
+          - 'img "只狼：影逝二度 Sekiro: Shadows Die Twice" [ref=e162]'
+          - generic [ref=e163]:
+            - 'heading "只狼：影逝二度 Sekiro: Shadows Die Twice" [level=3] [ref=e165]'
+            - paragraph [ref=e166]: 豆瓣 9.6
+            - generic [ref=e167]:
+              - generic [ref=e168]:
+                - generic [ref=e169]: 游戏 / 冒险 / 动作
+                - generic [ref=e170]: PC / XSX / PS4 / Xbox One
+              - generic [ref=e171]:
+                - paragraph [ref=e172]: FromSoftware, Inc.
+                - paragraph [ref=e173]: Activision
+                - paragraph [ref=e174]: 2019-03-22
+      - button "查看更多" [ref=e176] [cursor=pointer]
+    - generic [ref=e177]:
+      - generic [ref=e178]:
+        - heading "短评" [level=2] [ref=e180]
+        - generic [ref=e183]: 正在整理短评
+      - generic [ref=e184]:
+        - article [ref=e185]:
+          - generic [ref=e186]:
+            - img "DRINO" [ref=e187]
+            - generic [ref=e188]:
+              - strong [ref=e189]: DRINO
+              - generic [ref=e190]:
+                - generic "5 星" [ref=e192]:
+                  - generic [ref=e193]: ★★★★★
+                - time [ref=e194]: 2020年3月23日
+          - paragraph [ref=e195]: 7月4日 新开这本日记，也为了督促自己精进剑术，狩猎怪物。先要去宰了林子里的水鬼。 7月13日 打牌。 7月14日 打桩。 7月15日 和前任调情。 7月16日 杰洛特啊杰洛特！你怎么如此堕落！女儿还在被狂猎追杀你都忘了吗？不能再这样下去了！ 7月17日 打牌。
+          - button "已投票" [ref=e196] [cursor=pointer]: ♥ 2881
+        - article [ref=e197]:
+          - generic [ref=e198]:
+            - img "Jason_Chang" [ref=e199]
+            - generic [ref=e200]:
+              - strong [ref=e201]: Jason_Chang
+              - generic [ref=e202]:
+                - generic [ref=e203]:
+                  - generic "5 星" [ref=e204]:
+                    - generic [ref=e205]: ★★★★★
+                  - generic [ref=e206]: PC
+                - time [ref=e207]: 2017年12月2日
+          - paragraph [ref=e208]: 我买到了一个世界
+          - button "已投票" [ref=e209] [cursor=pointer]: ♥ 1604
+        - article [ref=e210]:
+          - generic [ref=e211]:
+            - img "生人回避" [ref=e212]
+            - generic [ref=e213]:
+              - strong [ref=e214]: 生人回避
+              - generic [ref=e215]:
+                - generic [ref=e216]:
+                  - generic "5 星" [ref=e217]:
+                    - generic [ref=e218]: ★★★★★
+                  - generic [ref=e219]: PC
+                - time [ref=e220]: 2020年10月22日
+          - paragraph [ref=e221]: 老人的儿子失踪了，发布悬赏想让人帮忙调查并带回。我说，这个任务可能危险度很高，你给的价格太低了，然后经过了三轮的议价，老人说他应该借的到。利用猎魔人的能力我调查到了老人所说的废墟，一头两人高的鹿首兽正在啃食着一个人的内脏。于是我拔刀向前，经过了几个回合的战斗，怪兽利用空间能力逃跑了。我查看了下旁边的尸体，不是老人的儿子，于是跟随血迹追到怪物巢穴。这次怪物躺在了我的脚下，旁边躺着老人儿子的尸体。我只能把悲痛的消息带回给...
+          - button "投票" [ref=e222] [cursor=pointer]: ♡ 1602
+        - article [ref=e223]:
+          - generic [ref=e224]:
+            - img "水立方" [ref=e225]
+            - generic [ref=e226]:
+              - strong [ref=e227]: 水立方
+              - generic [ref=e228]:
+                - generic "5 星" [ref=e230]:
+                  - generic [ref=e231]: ★★★★★
+                - time [ref=e232]: 2018年10月31日
+          - paragraph [ref=e233]: 妙龄少女惨遭追杀危在旦夕，亲爹忙着发动战争征服世界，养父忙着四处打牌推倒女术士
+          - button "投票" [ref=e234] [cursor=pointer]: ♡ 873
+        - article [ref=e235]:
+          - generic [ref=e236]:
+            - img "Ifrit" [ref=e237]
+            - generic [ref=e238]:
+              - strong [ref=e239]: Ifrit
+              - generic [ref=e240]:
+                - generic [ref=e241]:
+                  - generic "5 星" [ref=e242]:
+                    - generic [ref=e243]: ★★★★★
+                  - generic [ref=e244]: PC
+                - time [ref=e245]: 2015年6月4日
+          - paragraph [ref=e246]: 什么你父亲被狼人杀死？老婆被林中夫人拐走？女儿被狮鹫吃了？自己还被瞎了诅咒？先来一盘昆特牌吧！
+          - button "投票" [ref=e247] [cursor=pointer]: ♡ 720

@@ -1,0 +1,187 @@
+- main [ref=e4]:
+  - generic [ref=e38]:
+    - button "返回" [ref=e39] [cursor=pointer]:
+      - generic [ref=e40]: ‹
+    - button "分享" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic [ref=e48]:
+      - img "猎魔人 第一季 The Witcher Season 1 (2019)" [ref=e50]
+      - generic [ref=e51]:
+        - heading "猎魔人 第一季 The Witcher Season 1 (2019)" [level=1] [ref=e52]
+        - paragraph [ref=e53]: "电影 / 2019 / 导演: 阿利克·萨哈罗夫 / 夏洛特·布伦德斯特伦 / 亚历克斯·加西亚·洛佩斯 / 马克·约布斯特 编剧: 劳伦·施密特 / 安杰伊·萨普科夫斯基 主演: 亨利·卡维尔 / 弗蕾娅·艾伦"
+      - generic "收藏状态" [ref=e54]:
+        - button "⊕想看" [ref=e55] [cursor=pointer]
+        - button "⊙在看" [ref=e56] [cursor=pointer]
+        - button "☆看过" [ref=e57] [cursor=pointer]
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - text: 豆瓣评分
+          - generic [ref=e61]:
+            - strong [ref=e62]: "7.5"
+            - generic "4 星" [ref=e63]:
+              - generic [ref=e64]: ★★★★
+              - generic [ref=e65]: ★
+          - paragraph [ref=e66]: 来自豆瓣公开评分
+        - generic [ref=e67]:
+          - generic [ref=e68]: 我的评分
+          - generic "我的评分" [ref=e69]:
+            - button "1 星" [ref=e70] [cursor=pointer]: ★
+            - button "2 星" [ref=e71] [cursor=pointer]: ★
+            - button "3 星" [ref=e72] [cursor=pointer]: ★
+            - button "4 星" [ref=e73] [cursor=pointer]: ★
+            - button "5 星" [ref=e74] [cursor=pointer]: ★
+          - strong [ref=e76]: 在看
+      - paragraph [ref=e77]: 当前：在看 · 已同步
+    - generic [ref=e78]:
+      - heading "剧情简介" [level=2] [ref=e79]
+      - paragraph [ref=e80]: 《猎魔人》改编自畅销的奇幻小说系列，讲述了一个关于命运和家庭的史诗故事。利维亚的杰洛特是一名独居的猎魔人，他努力在这个人类比野兽更邪恶的世界上寻得自己的一席之地。但命运将他推向一名强大的女术士和一位身上暗藏着危险秘密的年轻公主，他们三人必须学会共同在日益动荡的大陆中前行。
+    - generic [ref=e81]:
+      - heading "职员表" [level=2] [ref=e83]
+      - generic [ref=e84]:
+        - link "阿利克·萨哈罗夫 Alik Sakharov 阿利克·萨哈罗夫 Alik Sakharov 导演" [ref=e85] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27251505/
+          - img "阿利克·萨哈罗夫 Alik Sakharov" [ref=e87]
+          - strong [ref=e88]: 阿利克·萨哈罗夫 Alik Sakharov
+          - generic [ref=e89]: 导演
+        - link "夏洛特·布伦德斯特伦 Charlotte Brändström 夏洛特·布伦德斯特伦 Charlotte Brändström 导演" [ref=e90] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27225093/
+          - img "夏洛特·布伦德斯特伦 Charlotte Brändström" [ref=e92]
+          - strong [ref=e93]: 夏洛特·布伦德斯特伦 Charlotte Brändström
+          - generic [ref=e94]: 导演
+        - link "亨利·卡维尔 Henry Cavill 亨利·卡维尔 Henry Cavill 饰 Geralt of Rivia" [ref=e95] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27250469/
+          - img "亨利·卡维尔 Henry Cavill" [ref=e97]
+          - strong [ref=e98]: 亨利·卡维尔 Henry Cavill
+          - generic [ref=e99]: 饰 Geralt of Rivia
+        - link "弗蕾娅·艾伦 Freya Allan 弗蕾娅·艾伦 Freya Allan 饰 Ciri" [ref=e100] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/30352528/
+          - img "弗蕾娅·艾伦 Freya Allan" [ref=e102]
+          - strong [ref=e103]: 弗蕾娅·艾伦 Freya Allan
+          - generic [ref=e104]: 饰 Ciri
+      - button "查看更多" [ref=e106] [cursor=pointer]
+    - generic [ref=e107]:
+      - heading "视频 / 图片" [level=2] [ref=e109]
+      - generic [ref=e110]:
+        - link "预告片 预告片 视频" [ref=e111] [cursor=pointer]:
+          - /url: https://movie.douban.com/trailer/256798/#content
+          - img "预告片" [ref=e113]
+          - generic [ref=e114]:
+            - strong [ref=e115]: 预告片
+            - generic [ref=e116]: 视频
+        - link "视频评论 视频评论 视频" [ref=e117] [cursor=pointer]:
+          - /url: https://movie.douban.com/video/104795/
+          - img "视频评论" [ref=e119]
+          - generic [ref=e120]:
+            - strong [ref=e121]: 视频评论
+            - generic [ref=e122]: 视频
+      - button "查看更多" [ref=e124] [cursor=pointer]
+    - generic [ref=e125]:
+      - heading "喜欢这部电影的人也喜欢" [level=2] [ref=e127]
+      - generic [ref=e128]:
+        - 'link "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019) 黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019) (2019) 豆瓣 7.5 · 导演: 汤姆·霍伯 / 杰米·奇尔兹 / 奥图·巴瑟赫斯特 / 安东尼·拜恩 / 尤洛斯·林 / 威廉·麦格雷戈 编剧: 杰克·索恩 2019 奇幻" [ref=e129] [cursor=pointer]':
+          - /url: /subject/movie/26657521
+          - img "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019)" [ref=e131]
+          - generic [ref=e132]:
+            - generic [ref=e133]:
+              - heading "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019)" [level=3] [ref=e134]
+              - generic [ref=e135]: (2019)
+            - paragraph [ref=e136]: "豆瓣 7.5 · 导演: 汤姆·霍伯 / 杰米·奇尔兹 / 奥图·巴瑟赫斯特 / 安东尼·拜恩 / 尤洛斯·林 / 威廉·麦格雷戈 编剧: 杰克·索恩"
+            - generic [ref=e138]:
+              - generic [ref=e139]: "2019"
+              - generic [ref=e140]: 奇幻
+        - 'link "时光之轮 第一季 The Wheel of Time Season 1 (2021) 时光之轮 第一季 The Wheel of Time Season 1 (2021) (2021) 豆瓣 7.3 · 导演: 乌塔·布里泽维茨 / 韦恩·叶 / 莎莉·理查德森-惠特菲尔德 / 夏兰·唐纳利 编剧: 罗伯特·乔丹 / 雷夫·贾金斯 / 阿曼达·凯特·舒曼 主演: 裴淳华 2021 剧情" [ref=e141] [cursor=pointer]':
+          - /url: /subject/movie/30345453
+          - img "时光之轮 第一季 The Wheel of Time Season 1 (2021)" [ref=e143]
+          - generic [ref=e144]:
+            - generic [ref=e145]:
+              - heading "时光之轮 第一季 The Wheel of Time Season 1 (2021)" [level=3] [ref=e146]
+              - generic [ref=e147]: (2021)
+            - paragraph [ref=e148]: "豆瓣 7.3 · 导演: 乌塔·布里泽维茨 / 韦恩·叶 / 莎莉·理查德森-惠特菲尔德 / 夏兰·唐纳利 编剧: 罗伯特·乔丹 / 雷夫·贾金斯 / 阿曼达·凯特·舒曼 主演: 裴淳华"
+            - generic [ref=e150]:
+              - generic [ref=e151]: "2021"
+              - generic [ref=e152]: 剧情
+        - 'link "太阳召唤 第一季 Shadow and Bone Season 1 (2021) 太阳召唤 第一季 Shadow and Bone Season 1 (2021) (2021) 豆瓣 7.3 · 导演: 梅尔西·阿尔马斯 / 李·托兰·克里格 编剧: 万尼亚·阿瑟 / Daegan Fryklind / 埃里克·海瑟尔 主演: 李梅 / 阿奇·雷诺 / 弗莱迪·卡特 2021 剧情" [ref=e153] [cursor=pointer]':
+          - /url: /subject/movie/30428349
+          - img "太阳召唤 第一季 Shadow and Bone Season 1 (2021)" [ref=e155]
+          - generic [ref=e156]:
+            - generic [ref=e157]:
+              - heading "太阳召唤 第一季 Shadow and Bone Season 1 (2021)" [level=3] [ref=e158]
+              - generic [ref=e159]: (2021)
+            - paragraph [ref=e160]: "豆瓣 7.3 · 导演: 梅尔西·阿尔马斯 / 李·托兰·克里格 编剧: 万尼亚·阿瑟 / Daegan Fryklind / 埃里克·海瑟尔 主演: 李梅 / 阿奇·雷诺 / 弗莱迪·卡特"
+            - generic [ref=e162]:
+              - generic [ref=e163]: "2021"
+              - generic [ref=e164]: 剧情
+        - 'link "龙之家族 第一季 House of the Dragon Season 1 (2022) 龙之家族 第一季 House of the Dragon Season 1 (2022) (2022) 豆瓣 8.7 · 导演: 米格尔·萨普什尼克 / 格雷格·艾坦尼斯 / 克莱尔·基尔纳 / 吉塔·瓦桑特·帕特尔 编剧: 莱恩·康道尔 / 萨拉·海斯 / 加布里埃尔·丰塞卡 2022 剧情" [ref=e165] [cursor=pointer]':
+          - /url: /subject/movie/34825964
+          - img "龙之家族 第一季 House of the Dragon Season 1 (2022)" [ref=e167]
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - heading "龙之家族 第一季 House of the Dragon Season 1 (2022)" [level=3] [ref=e170]
+              - generic [ref=e171]: (2022)
+            - paragraph [ref=e172]: "豆瓣 8.7 · 导演: 米格尔·萨普什尼克 / 格雷格·艾坦尼斯 / 克莱尔·基尔纳 / 吉塔·瓦桑特·帕特尔 编剧: 莱恩·康道尔 / 萨拉·海斯 / 加布里埃尔·丰塞卡"
+            - generic [ref=e174]:
+              - generic [ref=e175]: "2022"
+              - generic [ref=e176]: 剧情
+      - button "查看更多" [ref=e178] [cursor=pointer]
+    - generic [ref=e179]:
+      - generic [ref=e180]:
+        - heading "短评" [level=2] [ref=e182]
+        - generic [ref=e185]: 正在整理短评
+      - generic [ref=e186]:
+        - article [ref=e187]:
+          - generic [ref=e188]:
+            - img "迷之尴尬" [ref=e189]
+            - generic [ref=e190]:
+              - strong [ref=e191]: 迷之尴尬
+              - generic [ref=e192]:
+                - generic "3 星" [ref=e194]:
+                  - generic [ref=e195]: ★★★
+                  - generic [ref=e196]: ★★
+                - time [ref=e197]: 2019-12-20 21:31:40
+          - paragraph [ref=e198]: 网飞用实力告诉我hbo权游第一季有多么强悍
+          - button "投票" [ref=e199] [cursor=pointer]: ♡ 2036
+        - article [ref=e200]:
+          - generic [ref=e201]:
+            - img "andybluea" [ref=e202]
+            - generic [ref=e203]:
+              - strong [ref=e204]: andybluea
+              - generic [ref=e205]:
+                - generic "3 星" [ref=e207]:
+                  - generic [ref=e208]: ★★★
+                  - generic [ref=e209]: ★★
+                - time [ref=e210]: 2019-12-20 20:18:51
+          - paragraph [ref=e211]: 看完第一集，那道具是一眼看出是塑料做的，打仗跟闹着玩似的，对，黑社会对砍的那种，配乐流水线制作，毫无感情。看之前以为会是史诗巨制，看完才知道原来是开玩笑！
+          - button "投票" [ref=e212] [cursor=pointer]: ♡ 661
+        - article [ref=e213]:
+          - generic [ref=e214]:
+            - img "禹" [ref=e215]
+            - generic [ref=e216]:
+              - strong [ref=e217]: 禹
+              - generic [ref=e218]:
+                - generic "2 星" [ref=e220]:
+                  - generic [ref=e221]: ★★
+                  - generic [ref=e222]: ★★★
+                - time [ref=e223]: 2019-12-21 00:21:02
+          - paragraph [ref=e224]: 年度魔幻瞎逼剧 至少他们找对了男主角。不是吗
+          - button "投票" [ref=e225] [cursor=pointer]: ♡ 768
+        - article [ref=e226]:
+          - generic [ref=e227]:
+            - img "我先矛盾" [ref=e228]
+            - generic [ref=e229]:
+              - strong [ref=e230]: 我先矛盾
+              - time [ref=e232]: 2019-12-20 20:59:09
+          - paragraph [ref=e233]: 一群中世纪人讲着美国俚语…贵族们说“shit”、“fuck”这些词让人不适。
+          - button "投票" [ref=e234] [cursor=pointer]: ♡ 397
+        - article [ref=e235]:
+          - generic [ref=e236]:
+            - img "彼处水如酒" [ref=e237]
+            - generic [ref=e238]:
+              - strong [ref=e239]: 彼处水如酒
+              - generic [ref=e240]:
+                - generic "4 星" [ref=e242]:
+                  - generic [ref=e243]: ★★★★
+                  - generic [ref=e244]: ★
+                - time [ref=e245]: 2019-12-20 22:58:09
+          - paragraph [ref=e246]: 全剧颜值最高女角色竟是——杰洛特老母！！！
+          - button "投票" [ref=e247] [cursor=pointer]: ♡ 1301

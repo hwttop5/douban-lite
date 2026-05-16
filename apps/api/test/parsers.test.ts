@@ -323,6 +323,25 @@ describe("Douban parsers", () => {
     expect(result.items[0].rating).toBe(4);
   });
 
+  it("does not treat user collection data-rating as the public average rating", () => {
+    const result = parseUserCollection(
+      `
+      <article class="collection-item" data-status="collect">
+        <a href="https://movie.douban.com/subject/1862151/"><img src="/cover.jpg" /></a>
+        <h3>Movie Rated By User</h3>
+        <span class="rating" data-rating="5"></span>
+      </article>
+      `,
+      "https://movie.douban.com/people/demo/collect",
+      "movie",
+      "done"
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].rating).toBe(5);
+    expect(result.items[0].subject.averageRating).toBeNull();
+  });
+
   it("parses music comment vote actions from vote-comment handlers", () => {
     const action = parseSubjectCommentVoteAction(
       `

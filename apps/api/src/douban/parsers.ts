@@ -333,8 +333,7 @@ function titleFromRoot($: cheerio.CheerioAPI, root: cheerio.Cheerio<any>, anchor
 function ratingFromRoot(root: cheerio.Cheerio<any>) {
   const raw =
     root.find(".rating_num, .rating_nums, .rating-value, [property='v:average'], .font-small").first().text() ||
-    root.find("[data-rating], [data-average-rating]").first().attr("data-rating") ||
-    root.find("[data-rating], [data-average-rating]").first().attr("data-average-rating");
+    root.find("[data-average-rating]").first().attr("data-average-rating");
   const value = Number(raw);
   return Number.isFinite(value) && value > 0 ? value : null;
 }

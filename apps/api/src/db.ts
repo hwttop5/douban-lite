@@ -427,7 +427,7 @@ export class AppDatabase {
           subtitle = excluded.subtitle,
           year = excluded.year,
           cover_url = COALESCE(excluded.cover_url, subjects.cover_url),
-          average_rating = excluded.average_rating,
+          average_rating = COALESCE(excluded.average_rating, subjects.average_rating),
           summary = excluded.summary,
           creators_json = excluded.creators_json,
           metadata_json = excluded.metadata_json,

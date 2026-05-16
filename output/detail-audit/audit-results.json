@@ -1,0 +1,1408 @@
+[
+  {
+    "viewport": {
+      "key": "pc",
+      "label": "PC",
+      "width": 1440,
+      "height": 1100,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "movie",
+      "label": "??",
+      "id": "1292052"
+    },
+    "url": "http://127.0.0.1:5174/subject/movie/1292052",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "肖申克的救赎"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\pc-movie-1292052.png",
+    "dims": {
+      "width": 1440,
+      "height": 1290,
+      "viewportWidth": 1440,
+      "viewportHeight": 1100,
+      "capturedHeight": 1290
+    },
+    "audit": {
+      "viewport": {
+        "width": 1440,
+        "height": 1100
+      },
+      "h1": "肖申克的救赎",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 308,
+          "y": 28,
+          "width": 1104,
+          "height": 814,
+          "display": "grid",
+          "gridTemplateColumns": "383.297px 718.703px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 309,
+          "y": 29,
+          "width": 383,
+          "height": 560,
+          "display": "grid",
+          "gridTemplateColumns": "327.297px",
+          "flexDirection": "row",
+          "gap": "16px",
+          "padding": "28px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 337,
+          "y": 57,
+          "width": 210,
+          "height": 292,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 337,
+          "y": 365,
+          "width": 327,
+          "height": 132,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 337,
+          "y": 519,
+          "width": 327,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "103.766px 103.766px 103.766px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 692,
+          "y": 29,
+          "width": 719,
+          "height": 560,
+          "display": "grid",
+          "gridTemplateColumns": "662.703px",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "28px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 720,
+          "y": 352,
+          "width": 663,
+          "height": 130,
+          "display": "grid",
+          "gridTemplateColumns": "340.391px 272.312px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 692,
+          "y": 589,
+          "width": 719,
+          "height": 132,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 692,
+          "y": 721,
+          "width": 719,
+          "height": 120,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [
+        {
+          "tag": "SMALL",
+          "className": "",
+          "text": "导入自己的豆瓣 Cookie 后使用",
+          "x": 111,
+          "right": 245,
+          "width": 134,
+          "scrollWidth": 167,
+          "clientWidth": 134
+        }
+      ],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "pc",
+      "label": "PC",
+      "width": 1440,
+      "height": 1100,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "music",
+      "label": "??",
+      "id": "1417590"
+    },
+    "url": "http://127.0.0.1:5174/subject/music/1417590",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\pc-music-1417590.png",
+    "dims": {
+      "width": 1440,
+      "height": 1100,
+      "viewportWidth": 1440,
+      "viewportHeight": 1100,
+      "capturedHeight": 1100
+    },
+    "audit": {
+      "viewport": {
+        "width": 1440,
+        "height": 1100
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [
+        {
+          "tag": "SMALL",
+          "className": "",
+          "text": "导入自己的豆瓣 Cookie 后使用",
+          "x": 111,
+          "right": 245,
+          "width": 134,
+          "scrollWidth": 167,
+          "clientWidth": 134
+        }
+      ],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "pc",
+      "label": "PC",
+      "width": 1440,
+      "height": 1100,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "book",
+      "label": "??",
+      "id": "6082808"
+    },
+    "url": "http://127.0.0.1:5174/subject/book/6082808",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "百年孤独"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\pc-book-6082808.png",
+    "dims": {
+      "width": 1440,
+      "height": 1218,
+      "viewportWidth": 1440,
+      "viewportHeight": 1100,
+      "capturedHeight": 1218
+    },
+    "audit": {
+      "viewport": {
+        "width": 1440,
+        "height": 1100
+      },
+      "h1": "百年孤独",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 308,
+          "y": 28,
+          "width": 1104,
+          "height": 741,
+          "display": "grid",
+          "gridTemplateColumns": "383.297px 718.703px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 309,
+          "y": 29,
+          "width": 383,
+          "height": 515,
+          "display": "grid",
+          "gridTemplateColumns": "327.297px",
+          "flexDirection": "row",
+          "gap": "16px",
+          "padding": "28px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 337,
+          "y": 57,
+          "width": 210,
+          "height": 292,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 337,
+          "y": 365,
+          "width": 327,
+          "height": 87,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 337,
+          "y": 474,
+          "width": 327,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "103.766px 103.766px 103.766px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 692,
+          "y": 29,
+          "width": 719,
+          "height": 515,
+          "display": "grid",
+          "gridTemplateColumns": "662.703px",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "28px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 720,
+          "y": 307,
+          "width": 663,
+          "height": 130,
+          "display": "grid",
+          "gridTemplateColumns": "340.391px 272.312px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 692,
+          "y": 544,
+          "width": 719,
+          "height": 105,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 692,
+          "y": 649,
+          "width": 719,
+          "height": 120,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [
+        {
+          "tag": "SMALL",
+          "className": "",
+          "text": "导入自己的豆瓣 Cookie 后使用",
+          "x": 111,
+          "right": 245,
+          "width": 134,
+          "scrollWidth": 167,
+          "clientWidth": 134
+        }
+      ],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "pc",
+      "label": "PC",
+      "width": 1440,
+      "height": 1100,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "game",
+      "label": "??",
+      "id": "30347464"
+    },
+    "url": "http://127.0.0.1:5174/subject/game/30347464",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\pc-game-30347464.png",
+    "dims": {
+      "width": 1440,
+      "height": 1100,
+      "viewportWidth": 1440,
+      "viewportHeight": 1100,
+      "capturedHeight": 1100
+    },
+    "audit": {
+      "viewport": {
+        "width": 1440,
+        "height": 1100
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [
+        {
+          "tag": "SMALL",
+          "className": "",
+          "text": "导入自己的豆瓣 Cookie 后使用",
+          "x": 111,
+          "right": 245,
+          "width": 134,
+          "scrollWidth": 167,
+          "clientWidth": 134
+        }
+      ],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "tablet",
+      "label": "??",
+      "width": 834,
+      "height": 1112,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "movie",
+      "label": "??",
+      "id": "1292052"
+    },
+    "url": "http://127.0.0.1:5174/subject/movie/1292052",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "肖申克的救赎"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\tablet-movie-1292052.png",
+    "dims": {
+      "width": 834,
+      "height": 1112,
+      "viewportWidth": 834,
+      "viewportHeight": 1112,
+      "capturedHeight": 1112
+    },
+    "audit": {
+      "viewport": {
+        "width": 834,
+        "height": 1112
+      },
+      "h1": "肖申克的救赎",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 24,
+          "y": 18,
+          "width": 786,
+          "height": 786,
+          "display": "grid",
+          "gridTemplateColumns": "784px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 25,
+          "y": 19,
+          "width": 784,
+          "height": 315,
+          "display": "grid",
+          "gridTemplateColumns": "120px 608px",
+          "flexDirection": "row",
+          "gap": "16px",
+          "padding": "64px 20px 20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 45,
+          "y": 83,
+          "width": 120,
+          "height": 167,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 181,
+          "y": 83,
+          "width": 608,
+          "height": 113,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 45,
+          "y": 272,
+          "width": 744,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "242.656px 242.672px 242.672px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 25,
+          "y": 334,
+          "width": 784,
+          "height": 245,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "18px 20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 45,
+          "y": 352,
+          "width": 744,
+          "height": 130,
+          "display": "grid",
+          "gridTemplateColumns": "385.547px 308.453px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 25,
+          "y": 578,
+          "width": 784,
+          "height": 105,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 25,
+          "y": 683,
+          "width": 784,
+          "height": 120,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "tablet",
+      "label": "??",
+      "width": 834,
+      "height": 1112,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "music",
+      "label": "??",
+      "id": "1417590"
+    },
+    "url": "http://127.0.0.1:5174/subject/music/1417590",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\tablet-music-1417590.png",
+    "dims": {
+      "width": 834,
+      "height": 1112,
+      "viewportWidth": 834,
+      "viewportHeight": 1112,
+      "capturedHeight": 1112
+    },
+    "audit": {
+      "viewport": {
+        "width": 834,
+        "height": 1112
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "tablet",
+      "label": "??",
+      "width": 834,
+      "height": 1112,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "book",
+      "label": "??",
+      "id": "6082808"
+    },
+    "url": "http://127.0.0.1:5174/subject/book/6082808",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "百年孤独"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\tablet-book-6082808.png",
+    "dims": {
+      "width": 834,
+      "height": 1112,
+      "viewportWidth": 834,
+      "viewportHeight": 1112,
+      "capturedHeight": 1112
+    },
+    "audit": {
+      "viewport": {
+        "width": 834,
+        "height": 1112
+      },
+      "h1": "百年孤独",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 24,
+          "y": 18,
+          "width": 786,
+          "height": 786,
+          "display": "grid",
+          "gridTemplateColumns": "784px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 25,
+          "y": 19,
+          "width": 784,
+          "height": 315,
+          "display": "grid",
+          "gridTemplateColumns": "120px 608px",
+          "flexDirection": "row",
+          "gap": "16px",
+          "padding": "64px 20px 20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 45,
+          "y": 83,
+          "width": 120,
+          "height": 167,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 181,
+          "y": 83,
+          "width": 608,
+          "height": 68,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 45,
+          "y": 272,
+          "width": 744,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "242.656px 242.672px 242.672px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 25,
+          "y": 334,
+          "width": 784,
+          "height": 245,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "18px 20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 45,
+          "y": 352,
+          "width": 744,
+          "height": 130,
+          "display": "grid",
+          "gridTemplateColumns": "385.547px 308.453px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 25,
+          "y": 578,
+          "width": 784,
+          "height": 105,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 25,
+          "y": 683,
+          "width": 784,
+          "height": 120,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "tablet",
+      "label": "??",
+      "width": 834,
+      "height": 1112,
+      "mobile": false
+    },
+    "subject": {
+      "medium": "game",
+      "label": "??",
+      "id": "30347464"
+    },
+    "url": "http://127.0.0.1:5174/subject/game/30347464",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\tablet-game-30347464.png",
+    "dims": {
+      "width": 834,
+      "height": 1112,
+      "viewportWidth": 834,
+      "viewportHeight": 1112,
+      "capturedHeight": 1112
+    },
+    "audit": {
+      "viewport": {
+        "width": 834,
+        "height": 1112
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "mobile",
+      "label": "??",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    "subject": {
+      "medium": "movie",
+      "label": "??",
+      "id": "1292052"
+    },
+    "url": "http://127.0.0.1:5174/subject/movie/1292052",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "肖申克的救赎"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\mobile-movie-1292052.png",
+    "dims": {
+      "width": 390,
+      "height": 1033,
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "capturedHeight": 1033
+    },
+    "audit": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "h1": "肖申克的救赎",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 14,
+          "y": 14,
+          "width": 362,
+          "height": 911,
+          "display": "grid",
+          "gridTemplateColumns": "360px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 15,
+          "y": 15,
+          "width": 360,
+          "height": 249,
+          "display": "grid",
+          "gridTemplateColumns": "76px 244px",
+          "flexDirection": "row",
+          "gap": "12px",
+          "padding": "62px 14px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 29,
+          "y": 77,
+          "width": 76,
+          "height": 106,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 117,
+          "y": 77,
+          "width": 244,
+          "height": 113,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 29,
+          "y": 208,
+          "width": 332,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "105.328px 105.328px 105.344px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 15,
+          "y": 264,
+          "width": 360,
+          "height": 355,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "18px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 29,
+          "y": 282,
+          "width": 332,
+          "height": 241,
+          "display": "grid",
+          "gridTemplateColumns": "300px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 15,
+          "y": 619,
+          "width": 360,
+          "height": 160,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 15,
+          "y": 779,
+          "width": 360,
+          "height": 145,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "mobile",
+      "label": "??",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    "subject": {
+      "medium": "music",
+      "label": "??",
+      "id": "1417590"
+    },
+    "url": "http://127.0.0.1:5174/subject/music/1417590",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\mobile-music-1417590.png",
+    "dims": {
+      "width": 390,
+      "height": 844,
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "capturedHeight": 844
+    },
+    "audit": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "mobile",
+      "label": "??",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    "subject": {
+      "medium": "book",
+      "label": "??",
+      "id": "6082808"
+    },
+    "url": "http://127.0.0.1:5174/subject/book/6082808",
+    "nav": {
+      "loaded": true,
+      "ready": true,
+      "lastText": "百年孤独"
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\mobile-book-6082808.png",
+    "dims": {
+      "width": 390,
+      "height": 920,
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "capturedHeight": 920
+    },
+    "audit": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "h1": "百年孤独",
+      "sections": [
+        "剧情简介",
+        "短评"
+      ],
+      "boxes": [
+        {
+          "selector": ".detail-page",
+          "x": 14,
+          "y": 14,
+          "width": 362,
+          "height": 798,
+          "display": "grid",
+          "gridTemplateColumns": "360px",
+          "flexDirection": "row",
+          "gap": "0px",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero",
+          "x": 15,
+          "y": 15,
+          "width": 360,
+          "height": 242,
+          "display": "grid",
+          "gridTemplateColumns": "76px 244px",
+          "flexDirection": "row",
+          "gap": "12px",
+          "padding": "62px 14px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-hero__cover",
+          "x": 29,
+          "y": 77,
+          "width": 76,
+          "height": 106,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__body",
+          "x": 117,
+          "y": 77,
+          "width": 244,
+          "height": 68,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "0px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "hidden"
+        },
+        {
+          "selector": ".detail-hero__actions",
+          "x": 29,
+          "y": 201,
+          "width": 332,
+          "height": 42,
+          "display": "grid",
+          "gridTemplateColumns": "105.328px 105.328px 105.344px",
+          "flexDirection": "row",
+          "gap": "8px",
+          "padding": "0px",
+          "marginTop": "6px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-panel",
+          "x": 15,
+          "y": 257,
+          "width": 360,
+          "height": 355,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "18px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-rating-card",
+          "x": 29,
+          "y": 275,
+          "width": 332,
+          "height": 241,
+          "display": "grid",
+          "gridTemplateColumns": "300px",
+          "flexDirection": "row",
+          "gap": "18px",
+          "padding": "16px",
+          "marginTop": "0px",
+          "borderRadius": "8px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".detail-summary-section",
+          "x": 15,
+          "y": 612,
+          "width": 360,
+          "height": 105,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        },
+        {
+          "selector": ".comments-panel",
+          "x": 15,
+          "y": 717,
+          "width": 360,
+          "height": 94,
+          "display": "block",
+          "gridTemplateColumns": "none",
+          "flexDirection": "row",
+          "gap": "normal",
+          "padding": "20px 14px",
+          "marginTop": "0px",
+          "borderRadius": "0px",
+          "overflowX": "visible"
+        }
+      ],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  },
+  {
+    "viewport": {
+      "key": "mobile",
+      "label": "??",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    "subject": {
+      "medium": "game",
+      "label": "??",
+      "id": "30347464"
+    },
+    "url": "http://127.0.0.1:5174/subject/game/30347464",
+    "nav": {
+      "loaded": true,
+      "ready": false,
+      "lastText": "Douban session is blocked by login redirect or security challenge."
+    },
+    "screenshot": "C:\\Users\\ttop5\\Documents\\projects\\douban-lite\\output\\detail-audit\\mobile-game-30347464.png",
+    "dims": {
+      "width": 390,
+      "height": 844,
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "capturedHeight": 844
+    },
+    "audit": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "h1": "",
+      "sections": [],
+      "boxes": [],
+      "overflow": [],
+      "counts": {
+        "relatedCards": 0,
+        "mediaCards": 0,
+        "staffCards": 0,
+        "comments": 0
+      }
+    }
+  }
+]

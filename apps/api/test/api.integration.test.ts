@@ -170,6 +170,29 @@ describe("API integration", () => {
     expect(library.body.items[0].comment).toBe("Recovered from detail");
   });
 
+  it("keeps the cached public average rating when the collection page only exposes the user rating", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const detail = await agent.get("/api/subjects/game/30347464").expect(200);
+    expect(detail.body.subject.averageRating).toBe(9.6);
+
+    await agent.post("/api/sync/pull").send({}).expect(200);
+    await context.sync.drainQueue();
+
+    const library = await agent.get("/api/library?medium=game&status=wish").expect(200);
+    expect(library.body.items).toHaveLength(1);
+    expect(library.body.items[0].rating).toBe(5);
+    expect(library.body.items[0].subject.averageRating).toBe(9.6);
+  });
+
+  it("backfills the public average rating from subject detail when the collection page omits it", async () => {
+    await agent.post("/api/auth/douban").send({ cookie: "dbcl2=fake; ck=test;", peopleId: "demo-user" }).expect(200);
+
+    const library = await agent.get("/api/library?medium=game&status=wish").expect(200);
+    expect(library.body.items).toHaveLength(1);
+    expect(library.body.items[0].subject.averageRating).toBe(9.6);
+  });
+
   it("logs in through the douban proxy login flow", async () => {
     const started = await agent.post("/api/auth/douban/proxy/start").send({}).expect(200);
     expect(started.body.status).toBe("created");

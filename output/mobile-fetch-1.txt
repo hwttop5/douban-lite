@@ -1,0 +1,23 @@
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>豆瓣 - 登录跳转页</title>
+    <style type="text/css">
+        body{font-family:Arial,Helvetica,sans-serif;font-size:14px;}
+        h1{font-size:25px;margin:25px 0 10px 0;}
+    </style>
+</head>
+<body>
+    <div>
+        <div style="margin:20px auto;">
+            <div style="font-size:25px;color:#1b9336;border-bottom:5px solid #eef9eb">
+                <span style="font-size:20px;font-weight:bold">豆瓣</span> d<span style="color:#0092c8">o</span><span style="color:#ffad68">u</span><span>b</span><span style="color:#0092c8">a</span><span style="color:#ffad68">n</span>
+            </div>
+            <h1>登录跳转</h1>
+            <div><p>有异常请求从你的 IP 发出，请 <a href="https://accounts.douban.com/passport/login?redir=https%3A%2F%2Fm.douban.com%2Fmovie%2Fsubject%2F37311135%2Fcomments">登录</a> 使用豆瓣</p></div>
+        </div>
+    </div>
+</body>
+</html>
+

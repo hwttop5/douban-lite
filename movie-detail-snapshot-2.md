@@ -1,0 +1,358 @@
+- main [ref=e4]:
+  - generic [ref=e38]:
+    - button "返回" [ref=e39] [cursor=pointer]:
+      - generic [ref=e40]: ‹
+    - button "分享" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic [ref=e48]:
+      - img "猎魔人 第一季 The Witcher Season 1 (2019)" [ref=e50]
+      - generic [ref=e51]:
+        - heading "猎魔人 第一季 The Witcher Season 1 (2019)" [level=1] [ref=e52]
+        - paragraph [ref=e53]: "电影 / 2019 / 导演: 阿利克·萨哈罗夫 / 夏洛特·布伦德斯特伦 / 亚历克斯·加西亚·洛佩斯 / 马克·约布斯特 编剧: 劳伦·施密特 / 安杰伊·萨普科夫斯基 主演: 亨利·卡维尔 / 弗蕾娅·艾伦"
+      - generic "收藏状态" [ref=e54]:
+        - button "⊕想看" [ref=e55] [cursor=pointer]
+        - button "⊙在看" [ref=e56] [cursor=pointer]
+        - button "☆看过" [ref=e57] [cursor=pointer]
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - text: 豆瓣评分
+          - generic [ref=e61]:
+            - strong [ref=e62]: "7.5"
+            - generic "4 星" [ref=e63]:
+              - generic [ref=e64]: ★★★★
+              - generic [ref=e65]: ★
+          - paragraph [ref=e66]: 来自豆瓣公开评分
+        - generic [ref=e67]:
+          - generic [ref=e68]: 我的评分
+          - generic "我的评分" [ref=e69]:
+            - button "1 星" [ref=e70] [cursor=pointer]: ★
+            - button "2 星" [ref=e71] [cursor=pointer]: ★
+            - button "3 星" [ref=e72] [cursor=pointer]: ★
+            - button "4 星" [ref=e73] [cursor=pointer]: ★
+            - button "5 星" [ref=e74] [cursor=pointer]: ★
+          - strong [ref=e76]: 在看
+      - paragraph [ref=e77]: 当前：在看 · 已同步
+    - generic [ref=e78]:
+      - heading "剧情简介" [level=2] [ref=e79]
+      - paragraph [ref=e80]: 《猎魔人》改编自畅销的奇幻小说系列，讲述了一个关于命运和家庭的史诗故事。利维亚的杰洛特是一名独居的猎魔人，他努力在这个人类比野兽更邪恶的世界上寻得自己的一席之地。但命运将他推向一名强大的女术士和一位身上暗藏着危险秘密的年轻公主，他们三人必须学会共同在日益动荡的大陆中前行。
+    - generic [ref=e81]:
+      - heading "职员表" [level=2] [ref=e83]
+      - generic [ref=e84]:
+        - link "阿利克·萨哈罗夫 Alik Sakharov 阿利克·萨哈罗夫 Alik Sakharov 导演" [ref=e85] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27251505/
+          - img "阿利克·萨哈罗夫 Alik Sakharov" [ref=e87]
+          - strong [ref=e88]: 阿利克·萨哈罗夫 Alik Sakharov
+          - generic [ref=e89]: 导演
+        - link "夏洛特·布伦德斯特伦 Charlotte Brändström 夏洛特·布伦德斯特伦 Charlotte Brändström 导演" [ref=e90] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27225093/
+          - img "夏洛特·布伦德斯特伦 Charlotte Brändström" [ref=e92]
+          - strong [ref=e93]: 夏洛特·布伦德斯特伦 Charlotte Brändström
+          - generic [ref=e94]: 导演
+        - link "亨利·卡维尔 Henry Cavill 亨利·卡维尔 Henry Cavill 饰 Geralt of Rivia" [ref=e95] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/27250469/
+          - img "亨利·卡维尔 Henry Cavill" [ref=e97]
+          - strong [ref=e98]: 亨利·卡维尔 Henry Cavill
+          - generic [ref=e99]: 饰 Geralt of Rivia
+        - link "弗蕾娅·艾伦 Freya Allan 弗蕾娅·艾伦 Freya Allan 饰 Ciri" [ref=e100] [cursor=pointer]:
+          - /url: https://www.douban.com/personage/30352528/
+          - img "弗蕾娅·艾伦 Freya Allan" [ref=e102]
+          - strong [ref=e103]: 弗蕾娅·艾伦 Freya Allan
+          - generic [ref=e104]: 饰 Ciri
+      - button "查看更多" [ref=e106] [cursor=pointer]
+    - generic [ref=e107]:
+      - heading "视频 / 图片" [level=2] [ref=e109]
+      - generic [ref=e110]:
+        - link "预告片 预告片 视频" [ref=e111] [cursor=pointer]:
+          - /url: https://movie.douban.com/trailer/256798/#content
+          - img "预告片" [ref=e113]
+          - generic [ref=e114]:
+            - strong [ref=e115]: 预告片
+            - generic [ref=e116]: 视频
+        - link "视频评论 视频评论 视频" [ref=e117] [cursor=pointer]:
+          - /url: https://movie.douban.com/video/104795/
+          - img "视频评论" [ref=e119]
+          - generic [ref=e120]:
+            - strong [ref=e121]: 视频评论
+            - generic [ref=e122]: 视频
+      - button "查看更多" [ref=e124] [cursor=pointer]
+    - generic [ref=e125]:
+      - heading "喜欢这部电影的人也喜欢" [level=2] [ref=e127]
+      - generic [ref=e128]:
+        - 'link "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019) 黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019) (2019) 豆瓣 7.5 · 导演: 汤姆·霍伯 / 杰米·奇尔兹 / 奥图·巴瑟赫斯特 / 安东尼·拜恩 / 尤洛斯·林 / 威廉·麦格雷戈 编剧: 杰克·索恩 2019 奇幻" [ref=e129] [cursor=pointer]':
+          - /url: /subject/movie/26657521
+          - img "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019)" [ref=e131]
+          - generic [ref=e132]:
+            - generic [ref=e133]:
+              - heading "黑暗物质三部曲 第一季 His Dark Materials Season 1 (2019)" [level=3] [ref=e134]
+              - generic [ref=e135]: (2019)
+            - paragraph [ref=e136]: "豆瓣 7.5 · 导演: 汤姆·霍伯 / 杰米·奇尔兹 / 奥图·巴瑟赫斯特 / 安东尼·拜恩 / 尤洛斯·林 / 威廉·麦格雷戈 编剧: 杰克·索恩"
+            - generic [ref=e138]:
+              - generic [ref=e139]: "2019"
+              - generic [ref=e140]: 奇幻
+        - 'link "时光之轮 第一季 The Wheel of Time Season 1 (2021) 时光之轮 第一季 The Wheel of Time Season 1 (2021) (2021) 豆瓣 7.3 · 导演: 乌塔·布里泽维茨 / 韦恩·叶 / 莎莉·理查德森-惠特菲尔德 / 夏兰·唐纳利 编剧: 罗伯特·乔丹 / 雷夫·贾金斯 / 阿曼达·凯特·舒曼 主演: 裴淳华 2021 剧情" [ref=e141] [cursor=pointer]':
+          - /url: /subject/movie/30345453
+          - img "时光之轮 第一季 The Wheel of Time Season 1 (2021)" [ref=e143]
+          - generic [ref=e144]:
+            - generic [ref=e145]:
+              - heading "时光之轮 第一季 The Wheel of Time Season 1 (2021)" [level=3] [ref=e146]
+              - generic [ref=e147]: (2021)
+            - paragraph [ref=e148]: "豆瓣 7.3 · 导演: 乌塔·布里泽维茨 / 韦恩·叶 / 莎莉·理查德森-惠特菲尔德 / 夏兰·唐纳利 编剧: 罗伯特·乔丹 / 雷夫·贾金斯 / 阿曼达·凯特·舒曼 主演: 裴淳华"
+            - generic [ref=e150]:
+              - generic [ref=e151]: "2021"
+              - generic [ref=e152]: 剧情
+        - 'link "太阳召唤 第一季 Shadow and Bone Season 1 (2021) 太阳召唤 第一季 Shadow and Bone Season 1 (2021) (2021) 豆瓣 7.3 · 导演: 梅尔西·阿尔马斯 / 李·托兰·克里格 编剧: 万尼亚·阿瑟 / Daegan Fryklind / 埃里克·海瑟尔 主演: 李梅 / 阿奇·雷诺 / 弗莱迪·卡特 2021 剧情" [ref=e153] [cursor=pointer]':
+          - /url: /subject/movie/30428349
+          - img "太阳召唤 第一季 Shadow and Bone Season 1 (2021)" [ref=e155]
+          - generic [ref=e156]:
+            - generic [ref=e157]:
+              - heading "太阳召唤 第一季 Shadow and Bone Season 1 (2021)" [level=3] [ref=e158]
+              - generic [ref=e159]: (2021)
+            - paragraph [ref=e160]: "豆瓣 7.3 · 导演: 梅尔西·阿尔马斯 / 李·托兰·克里格 编剧: 万尼亚·阿瑟 / Daegan Fryklind / 埃里克·海瑟尔 主演: 李梅 / 阿奇·雷诺 / 弗莱迪·卡特"
+            - generic [ref=e162]:
+              - generic [ref=e163]: "2021"
+              - generic [ref=e164]: 剧情
+        - 'link "龙之家族 第一季 House of the Dragon Season 1 (2022) 龙之家族 第一季 House of the Dragon Season 1 (2022) (2022) 豆瓣 8.7 · 导演: 米格尔·萨普什尼克 / 格雷格·艾坦尼斯 / 克莱尔·基尔纳 / 吉塔·瓦桑特·帕特尔 编剧: 莱恩·康道尔 / 萨拉·海斯 / 加布里埃尔·丰塞卡 2022 剧情" [ref=e165] [cursor=pointer]':
+          - /url: /subject/movie/34825964
+          - img "龙之家族 第一季 House of the Dragon Season 1 (2022)" [ref=e167]
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - heading "龙之家族 第一季 House of the Dragon Season 1 (2022)" [level=3] [ref=e170]
+              - generic [ref=e171]: (2022)
+            - paragraph [ref=e172]: "豆瓣 8.7 · 导演: 米格尔·萨普什尼克 / 格雷格·艾坦尼斯 / 克莱尔·基尔纳 / 吉塔·瓦桑特·帕特尔 编剧: 莱恩·康道尔 / 萨拉·海斯 / 加布里埃尔·丰塞卡"
+            - generic [ref=e174]:
+              - generic [ref=e175]: "2022"
+              - generic [ref=e176]: 剧情
+      - button "查看更多" [ref=e178] [cursor=pointer]
+    - generic [ref=e179]:
+      - heading "短评" [level=2] [ref=e182]
+      - generic [ref=e183]:
+        - article [ref=e184]:
+          - generic [ref=e185]:
+            - img "迷之尴尬" [ref=e186]
+            - generic [ref=e187]:
+              - strong [ref=e188]: 迷之尴尬
+              - generic [ref=e189]:
+                - generic "3 星" [ref=e191]:
+                  - generic [ref=e192]: ★★★
+                  - generic [ref=e193]: ★★
+                - time [ref=e194]: 2019-12-20 21:31:40
+          - paragraph [ref=e195]: 网飞用实力告诉我hbo权游第一季有多么强悍
+          - button "投票" [ref=e196] [cursor=pointer]: ♡ 2036
+        - article [ref=e197]:
+          - generic [ref=e198]:
+            - img "andybluea" [ref=e199]
+            - generic [ref=e200]:
+              - strong [ref=e201]: andybluea
+              - generic [ref=e202]:
+                - generic "3 星" [ref=e204]:
+                  - generic [ref=e205]: ★★★
+                  - generic [ref=e206]: ★★
+                - time [ref=e207]: 2019-12-20 20:18:51
+          - paragraph [ref=e208]: 看完第一集，那道具是一眼看出是塑料做的，打仗跟闹着玩似的，对，黑社会对砍的那种，配乐流水线制作，毫无感情。看之前以为会是史诗巨制，看完才知道原来是开玩笑！
+          - button "投票" [ref=e209] [cursor=pointer]: ♡ 661
+        - article [ref=e210]:
+          - generic [ref=e211]:
+            - img "禹" [ref=e212]
+            - generic [ref=e213]:
+              - strong [ref=e214]: 禹
+              - generic [ref=e215]:
+                - generic "2 星" [ref=e217]:
+                  - generic [ref=e218]: ★★
+                  - generic [ref=e219]: ★★★
+                - time [ref=e220]: 2019-12-21 00:21:02
+          - paragraph [ref=e221]: 年度魔幻瞎逼剧 至少他们找对了男主角。不是吗
+          - button "投票" [ref=e222] [cursor=pointer]: ♡ 768
+        - article [ref=e223]:
+          - generic [ref=e224]:
+            - img "我先矛盾" [ref=e225]
+            - generic [ref=e226]:
+              - strong [ref=e227]: 我先矛盾
+              - time [ref=e229]: 2019-12-20 20:59:09
+          - paragraph [ref=e230]: 一群中世纪人讲着美国俚语…贵族们说“shit”、“fuck”这些词让人不适。
+          - button "投票" [ref=e231] [cursor=pointer]: ♡ 397
+        - article [ref=e232]:
+          - generic [ref=e233]:
+            - img "彼处水如酒" [ref=e234]
+            - generic [ref=e235]:
+              - strong [ref=e236]: 彼处水如酒
+              - generic [ref=e237]:
+                - generic "4 星" [ref=e239]:
+                  - generic [ref=e240]: ★★★★
+                  - generic [ref=e241]: ★
+                - time [ref=e242]: 2019-12-20 22:58:09
+          - paragraph [ref=e243]: 全剧颜值最高女角色竟是——杰洛特老母！！！
+          - button "投票" [ref=e244] [cursor=pointer]: ♡ 1301
+        - article [ref=e245]:
+          - generic [ref=e246]:
+            - img "花冠袭人" [ref=e247]
+            - generic [ref=e248]:
+              - strong [ref=e249]: 花冠袭人
+              - generic [ref=e250]:
+                - generic "3 星" [ref=e252]:
+                  - generic [ref=e253]: ★★★
+                  - generic [ref=e254]: ★★
+                - time [ref=e255]: 2019-12-21 12:37:28
+          - paragraph [ref=e256]: 一觉醒来看到很多观众跟我的想法一样，松了一口气。还以为自己因为不懂游戏和原著失去了判断力。一半台词是废的，似乎剧情越是紧张越是捡没要紧的说，让人着急，对本来就蒙圈的路人尤其致命。第二集那个游吟诗人damn irritating。制作看上去钱很不够的样子，比《梅林传奇》都差。《梅林》好歹还有幽默感。本来以为可以看我亨，结果发现很难忽略其余难受的部分。听说第二集出现的那个有残疾的女孩是女主，会变成大美女。美女不美女的先不说，这个姑娘的性格很不讨喜啊。两集弃。过一阵子看我亨的混剪好了。三星都给我亨。
+          - button "投票" [ref=e257] [cursor=pointer]: ♡ 298
+        - article [ref=e258]:
+          - generic [ref=e259]:
+            - img "路过" [ref=e260]
+            - generic [ref=e261]:
+              - strong [ref=e262]: 路过
+              - generic [ref=e263]:
+                - generic "2 星" [ref=e265]:
+                  - generic [ref=e266]: ★★
+                  - generic [ref=e267]: ★★★
+                - time [ref=e268]: 2019-12-21 12:54:31
+          - paragraph [ref=e269]: 亨利·卡维尔真是个赏心悦目的花瓶，我甚至可以原谅他的演技，但是对于里面全是male gaze视角下的女演员，而男演员泡澡都穿着短裤这一点，我绝对不会容忍；讽刺的是这部剧的运作人还是一位女性
+          - button "投票" [ref=e270] [cursor=pointer]: ♡ 76
+        - article [ref=e271]:
+          - generic [ref=e272]:
+            - img "JayWaston" [ref=e273]
+            - generic [ref=e274]:
+              - strong [ref=e275]: JayWaston
+              - generic [ref=e276]:
+                - generic "3 星" [ref=e278]:
+                  - generic [ref=e279]: ★★★
+                  - generic [ref=e280]: ★★
+                - time [ref=e281]: 2019-12-21 11:41:32
+          - paragraph [ref=e282]: 整部剧的女角色加起来都没有一个大超好看，给我整笑了。更别提这憨批剧情了，没玩过游戏的人看剧看得明白吗？我还是回去玩游戏吧。我吐了。
+          - button "投票" [ref=e283] [cursor=pointer]: ♡ 182
+        - article [ref=e284]:
+          - generic [ref=e285]:
+            - img "物语" [ref=e286]
+            - generic [ref=e287]:
+              - strong [ref=e288]: 物语
+              - generic [ref=e289]:
+                - generic "5 星" [ref=e291]:
+                  - generic [ref=e292]: ★★★★★
+                - time [ref=e293]: 2019-12-20 11:42:41
+          - paragraph [ref=e294]: 咋的？凭啥游戏党爪巴？没有游戏的销量 原著那个样子还想出剧？连个中文译本都不会有
+          - button "投票" [ref=e295] [cursor=pointer]: ♡ 1719
+        - article [ref=e296]:
+          - generic [ref=e297]:
+            - img "Henry Porter" [ref=e298]
+            - generic [ref=e299]:
+              - strong [ref=e300]: Henry Porter
+              - time [ref=e302]: 2019-12-21 12:32:50
+          - paragraph [ref=e303]: 有一种绝地武士和猎魔人联手毁了我的圣诞假的感觉
+          - button "投票" [ref=e304] [cursor=pointer]: ♡ 112
+        - article [ref=e305]:
+          - generic [ref=e306]:
+            - img "维特根斯坦字典" [ref=e307]
+            - generic [ref=e308]:
+              - strong [ref=e309]: 维特根斯坦字典
+              - generic [ref=e310]:
+                - generic "1 星" [ref=e312]:
+                  - generic [ref=e313]: ★
+                  - generic [ref=e314]: ★★★★
+                - time [ref=e315]: 2019-12-22 18:01:13
+          - paragraph [ref=e316]: 这卡司。。原著+游戏双料党已经失去理智，我要是杰洛特，我就和伦弗芮私奔去当土匪谢谢，我做你🐎的猎魔人，人间不值得
+          - button "投票" [ref=e317] [cursor=pointer]: ♡ 196
+        - article [ref=e318]:
+          - generic [ref=e319]:
+            - img "HolyC" [ref=e320]
+            - generic [ref=e321]:
+              - strong [ref=e322]: HolyC
+              - generic [ref=e323]:
+                - generic "4 星" [ref=e325]:
+                  - generic [ref=e326]: ★★★★
+                  - generic [ref=e327]: ★
+                - time [ref=e328]: 2019-12-21 10:46:29
+          - paragraph [ref=e329]: 早期推特上的那些预测成真了。除了netflix早就饱受诟病，已经被嘲讽成梗的政治正确外，netflix现在的问题是愿意花钱去拍很多剧，却不愿意在一部剧上花很多钱。
+          - button "投票" [ref=e330] [cursor=pointer]: ♡ 1044
+        - article [ref=e331]:
+          - generic [ref=e332]:
+            - img "િ?ીિ?ીོ" [ref=e333]
+            - generic [ref=e334]:
+              - strong [ref=e335]: િ?ીિ?ીོ
+              - generic [ref=e336]:
+                - generic "3 星" [ref=e338]:
+                  - generic [ref=e339]: ★★★
+                  - generic [ref=e340]: ★★
+                - time [ref=e341]: 2019-12-21 11:04:17
+          - paragraph [ref=e342]: 有时间看这个不如去看曼达洛人。Netflix你真是要毁大IP了。猎魔人大时间线是你们抓骰子决定的吗？你知不知道第一集讲完的事情放在权游里能拍两季？这种叙事对新人来说一头雾水😌对老粉来说寡淡空洞，这就是我等了半年多猎魔人？我去看两集曼达洛人压压惊。
+          - button "投票" [ref=e343] [cursor=pointer]: ♡ 109
+        - article [ref=e344]:
+          - generic [ref=e345]:
+            - img "all gone" [ref=e346]
+            - generic [ref=e347]:
+              - strong [ref=e348]: all gone
+              - generic [ref=e349]:
+                - generic "4 星" [ref=e351]:
+                  - generic [ref=e352]: ★★★★
+                  - generic [ref=e353]: ★
+                - time [ref=e354]: 2019-12-20 18:49:42
+          - paragraph [ref=e355]: e01 已阅，如果你期待如GOT般厚重的史诗美剧，你将大失所望。如果你期待如巫师游戏般难以抉择的分支选项，你将喜不自胜。PS：这么说吧，道具很贫穷，人物很单薄，没有历史的厚重感，感觉在看真人拍的泡面番，作为番剧还是挺好看的。
+          - button "投票" [ref=e356] [cursor=pointer]: ♡ 736
+        - article [ref=e357]:
+          - generic [ref=e358]:
+            - img "飞侠式拼搏" [ref=e359]
+            - generic [ref=e360]:
+              - strong [ref=e361]: 飞侠式拼搏
+              - generic [ref=e362]:
+                - generic "3 星" [ref=e364]:
+                  - generic [ref=e365]: ★★★
+                  - generic [ref=e366]: ★★
+                - time [ref=e367]: 2019-12-21 02:15:11
+          - paragraph [ref=e368]: 我就想知道有多少人是被前期宣传什么史诗巨作，媲美、接班权游而骗过来的……不是原著党，也不是游戏党，路人能够坚持看完就已经很不容易了，然而更加要命的是看完后却依旧有些懵逼，好比你付出了却得不到应有的回报。
+          - button "投票" [ref=e369] [cursor=pointer]: ♡ 59
+        - article [ref=e370]:
+          - generic [ref=e371]:
+            - img "忘尘缘" [ref=e372]
+            - generic [ref=e373]:
+              - strong [ref=e374]: 忘尘缘
+              - generic [ref=e375]:
+                - generic "5 星" [ref=e377]:
+                  - generic [ref=e378]: ★★★★★
+                - time [ref=e379]: 2019-12-20 21:27:07
+          - paragraph [ref=e380]: 大超用蝙蝠侠的声音演了杰洛特...
+          - button "投票" [ref=e381] [cursor=pointer]: ♡ 1062
+        - article [ref=e382]:
+          - generic [ref=e383]:
+            - img "QuiteThrilling" [ref=e384]
+            - generic [ref=e385]:
+              - strong [ref=e386]: QuiteThrilling
+              - generic [ref=e387]:
+                - generic "3 星" [ref=e389]:
+                  - generic [ref=e390]: ★★★
+                  - generic [ref=e391]: ★★
+                - time [ref=e392]: 2019-12-23 15:54:51
+          - paragraph [ref=e393]: 如果因为cast了亨利导致全剧这么贫穷，那不如换新人来演。亨利演技搭配高中生叶奈法真的辣眼睛。抛开各种似乎不符原作的选角和同人式角色改编不谈，这个剧的结构有点失败，世界观根本没来得及介绍，似乎预设好所有观众都是玩家/原作党，可能也是因为知道大家会bingewatch，因而才搞了个根本没必要的多时间线进一步搅乱路人观众的理解。猎魔小故事有点意思，一碰主线就充满了迷惑，放大了前期角色塑造失败和没有解释世界观的问题，导致杰&叶的相遇和索登之战等主情节蜜汁怪异。原材料这么丰富，拍成这样真的不可以。
+          - button "投票" [ref=e394] [cursor=pointer]: ♡ 37
+        - article [ref=e395]:
+          - generic [ref=e396]:
+            - img "itsnotoywj" [ref=e397]
+            - generic [ref=e398]:
+              - strong [ref=e399]: itsnotoywj
+              - generic [ref=e400]:
+                - generic "5 星" [ref=e402]:
+                  - generic [ref=e403]: ★★★★★
+                - time [ref=e404]: 2019-12-20 14:28:59
+          - paragraph [ref=e405]: 巫师2游戏被波兰总统当做国礼送给奥巴马，不管是波兰还是全世界范围，巫师系列游戏的影响力和成就都远远高于小说。再然后cdpr购买了永久改编权，游戏属于正统作品，上面那位拿同人秀低级优越的给👴爪巴
+          - button "投票" [ref=e406] [cursor=pointer]: ♡ 824
+        - article [ref=e407]:
+          - generic [ref=e408]:
+            - img "adakenndy" [ref=e409]
+            - generic [ref=e410]:
+              - strong [ref=e411]: adakenndy
+              - generic [ref=e412]:
+                - generic "3 星" [ref=e414]:
+                  - generic [ref=e415]: ★★★
+                  - generic [ref=e416]: ★★
+                - time [ref=e417]: 2019-12-23 03:24:54
+          - paragraph [ref=e418]: 就算拿普通美剧标准去衡量猎魔人也是不及格的，所以反驳所谓权游接班人言论！开篇感情戏，故事主线统统一团糟，巫师正试图给杰洛塔一份工作，一位酒吧女子莫名其妙跟杰洛塔有一面之缘的人开始干柴烈火XXOO，感情线确实很一脸懵逼，然后第二天她莫名其妙第早上就跑回村子，现在又想和男主决斗？？我继续对这个急转直下的杀情侣戏一脸懵逼。 E3:论整容手术对职业规划的重要性，好的医美锦上添花，坏的医美，暴珍天物。 E4:嫁给一个刺猬精和喜当爹有什么体验？在猎魔人的世界里，男女角色是不需要任何铺垫，一言不合就上床的，服了服了。 E6:你告诉我这叫龙？这分明是脱了毛的🐔！ E7:勉强不错的一集，三条时间线终于交叉了，这集可以打8/10 E8:你以为我是叶奈法？嘿嘿，我其实是X战警黑凤凰
+          - button "投票" [ref=e419] [cursor=pointer]: ♡ 70
+        - article [ref=e420]:
+          - generic [ref=e421]:
+            - img "银河停电" [ref=e422]
+            - generic [ref=e423]:
+              - strong [ref=e424]: 银河停电
+              - generic [ref=e425]:
+                - generic "1 星" [ref=e427]:
+                  - generic [ref=e428]: ★
+                  - generic [ref=e429]: ★★★★
+                - time [ref=e430]: 2019-12-21 02:08:35
+          - paragraph [ref=e431]: 之前看预告的时候还以为是史诗级巨制，没想到实物质感这么廉价，甚至剧情也莫名其妙，稀碎，找不到任何主线，对非原著党很不友好。人物对话也是感觉说了很多却好像什么都没说，女角色们也不知道是怎么选的……
+          - button "投票" [ref=e432] [cursor=pointer]: ♡ 176

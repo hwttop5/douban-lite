@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
+import path from "node:path";
 import process from "node:process";
 
 function isPortFree(port) {
@@ -24,12 +25,11 @@ async function findAvailablePort(preferredPort, attempts = 20) {
   throw new Error(`Unable to find a free port near ${preferredPort}.`);
 }
 
-function spawnWorkspace(command, args, env) {
-  const executable = process.platform === "win32" ? "cmd.exe" : "npm";
-  const spawnArgs = process.platform === "win32" ? ["/d", "/s", "/c", `npm ${args.join(" ")}`] : args;
-  const child = spawn(executable, spawnArgs, {
-    cwd: process.cwd(),
+function spawnWorkspace(command, cwd, args, env) {
+  const child = spawn(process.execPath, args, {
+    cwd,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
     env: {
       ...process.env,
       ...env
@@ -47,45 +47,103 @@ function spawnWorkspace(command, args, env) {
   return child;
 }
 
+function describeExit(code, signal) {
+  if (signal) {
+    return `signal ${signal}`;
+  }
+  return `code ${code ?? 0}`;
+}
+
+function isChildRunning(child) {
+  return child.exitCode == null && child.signalCode == null;
+}
+
+function killWorkspace(child) {
+  if (!child.pid || !isChildRunning(child)) {
+    return Promise.resolve();
+  }
+
+  if (process.platform === "win32") {
+    return new Promise((resolve) => {
+      const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+        stdio: "ignore",
+        windowsHide: true
+      });
+      killer.once("error", () => resolve());
+      killer.once("exit", () => resolve());
+    });
+  }
+
+  return new Promise((resolve) => {
+    const finish = () => resolve();
+    child.once("exit", finish);
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      child.off("exit", finish);
+      resolve();
+      return;
+    }
+
+    setTimeout(() => {
+      if (!isChildRunning(child)) {
+        return;
+      }
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Ignore final kill failures during shutdown.
+      }
+    }, 3000).unref();
+  });
+}
+
 const apiPort = await findAvailablePort(Number(process.env.PORT ?? 8787));
 const webPort = await findAvailablePort(Number(process.env.WEB_PORT ?? 5173));
 const apiTarget = `http://127.0.0.1:${apiPort}`;
+const rootDir = process.cwd();
+const tsxCliPath = path.join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
+const viteCliPath = path.join(rootDir, "node_modules", "vite", "bin", "vite.js");
 
 console.log(`[dev] douban-lite web -> http://127.0.0.1:${webPort}`);
 console.log(`[dev] douban-lite api -> ${apiTarget}`);
 
 const children = [
-  spawnWorkspace("@douban-lite/api", ["run", "dev", "--workspace", "@douban-lite/api"], {
-    PORT: String(apiPort)
-  }),
-  spawnWorkspace("@douban-lite/web", ["run", "dev", "--workspace", "@douban-lite/web", "--", "--host", "127.0.0.1", "--port", String(webPort)], {
-    VITE_API_PROXY_TARGET: apiTarget
-  })
+  {
+    command: "@douban-lite/api",
+    child: spawnWorkspace("@douban-lite/api", path.join(rootDir, "apps", "api"), [tsxCliPath, "watch", "src/index.ts"], {
+      PORT: String(apiPort)
+    })
+  },
+  {
+    command: "@douban-lite/web",
+    child: spawnWorkspace("@douban-lite/web", path.join(rootDir, "apps", "web"), [viteCliPath, "--host", "127.0.0.1", "--port", String(webPort)], {
+      VITE_API_PROXY_TARGET: apiTarget
+    })
+  }
 ];
 
 let shuttingDown = false;
 
-function shutdown(code = 0) {
+async function shutdown(code = 0) {
   if (shuttingDown) {
     return;
   }
   shuttingDown = true;
-  for (const child of children) {
-    if (!child.killed) {
-      child.kill("SIGTERM");
-    }
-  }
+  await Promise.all(children.map(({ child }) => killWorkspace(child)));
   process.exit(code);
 }
 
-for (const child of children) {
-  child.once("exit", (code) => {
+for (const { command, child } of children) {
+  child.once("exit", (code, signal) => {
+    console.log(`[dev] ${command} exited with ${describeExit(code, signal)}`);
     if (shuttingDown) {
       return;
     }
-    shutdown(code ?? 0);
+    const exitCode = code && code > 0 ? code : 1;
+    void shutdown(exitCode);
   });
 }
 
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
+process.on("SIGINT", () => void shutdown(0));
+process.on("SIGTERM", () => void shutdown(0));

@@ -3,6 +3,7 @@ import type {
   AuthMeResponse,
   DoubanLoginResponse,
   DoubanSessionStatus,
+  LibraryEntry,
   LibraryResponse,
   Medium,
   OverviewResponse,
@@ -84,6 +85,19 @@ function mergeSubjectRecords(base: SubjectDetailResponse["subject"], incoming: S
     summary: incoming.summary ?? base.summary,
     creators: incoming.creators.length > 0 ? incoming.creators : base.creators,
     metadata: hasIncomingMetadata ? incoming.metadata : { ...base.metadata, ...incoming.metadata }
+  };
+}
+
+function mergeSubjectAverageRating(
+  remote: SubjectDetailResponse["subject"],
+  fallback: SubjectDetailResponse["subject"] | null
+): SubjectDetailResponse["subject"] {
+  if (remote.averageRating != null || !fallback?.averageRating) {
+    return remote;
+  }
+  return {
+    ...remote,
+    averageRating: fallback.averageRating
   };
 }
 
@@ -377,27 +391,31 @@ export class SyncService {
         const total =
           remote.total ??
           (remote.hasNext ? input.page * Math.max(1, pageSize) + 1 : Math.max(0, (input.page - 1) * Math.max(1, pageSize) + remote.items.length));
+        const items = remote.items.map((item) => {
+          const cachedSubject = this.db.getSubject(item.subject.medium, item.subject.doubanId);
+          const subject = mergeSubjectAverageRating(item.subject, cachedSubject);
+          this.db.upsertSubject(subject);
+          const local = this.db.getUserItem(userId, item.subject.medium, item.subject.doubanId);
+          return {
+            medium: item.subject.medium,
+            doubanId: item.subject.doubanId,
+            status: item.status,
+            rating: item.rating,
+            comment: item.comment,
+            tags: local?.tags ?? [],
+            syncToTimeline: local?.syncToTimeline ?? true,
+            syncState: local?.syncState ?? "synced",
+            errorMessage: local?.errorMessage ?? null,
+            updatedAt: local?.updatedAt ?? fetchedAt,
+            lastSyncedAt: local?.lastSyncedAt ?? fetchedAt,
+            lastPushedAt: local?.lastPushedAt ?? null,
+            subject
+          } satisfies LibraryEntry;
+        });
+        await this.enrichLibraryEntriesFromDetails(items, session.cookie);
 
         return {
-          items: remote.items.map((item) => {
-            this.db.upsertSubject(item.subject);
-            const local = this.db.getUserItem(userId, item.subject.medium, item.subject.doubanId);
-            return {
-              medium: item.subject.medium,
-              doubanId: item.subject.doubanId,
-              status: item.status,
-              rating: item.rating,
-              comment: item.comment,
-              tags: local?.tags ?? [],
-              syncToTimeline: local?.syncToTimeline ?? true,
-              syncState: local?.syncState ?? "synced",
-              errorMessage: local?.errorMessage ?? null,
-              updatedAt: local?.updatedAt ?? fetchedAt,
-              lastSyncedAt: local?.lastSyncedAt ?? fetchedAt,
-              lastPushedAt: local?.lastPushedAt ?? null,
-              subject: item.subject
-            };
-          }),
+          items,
           pagination: {
             page: input.page,
             pageSize,
@@ -413,21 +431,32 @@ export class SyncService {
       }
     }
     const response = this.db.listLibrary(userId, input);
-    const missingCoverItems = response.items.filter((item) => !item.subject.coverUrl);
-    if (missingCoverItems.length === 0) {
+    const refreshed = await this.enrichLibraryEntriesFromDetails(response.items, session.cookie);
+    if (!refreshed) {
       return response;
     }
+    return this.db.listLibrary(userId, input);
+  }
+
+  private async enrichLibraryEntriesFromDetails(items: LibraryEntry[], cookie: string) {
+    const needsEnrichment = items.filter((item) => !item.subject.coverUrl || item.subject.averageRating == null);
+    if (needsEnrichment.length === 0) {
+      return false;
+    }
+
     let refreshed = false;
-    for (const item of missingCoverItems) {
+    for (const item of needsEnrichment) {
       try {
-        const detail = await this.client.getSubjectDetail(item.medium, item.doubanId, session.cookie);
-        this.db.upsertSubject(detail.subject);
-        refreshed = refreshed || Boolean(detail.subject.coverUrl);
+        const detail = await this.client.getSubjectDetail(item.medium, item.doubanId, cookie);
+        const subject = mergeSubjectRecords(item.subject, detail.subject);
+        this.db.upsertSubject(subject);
+        item.subject = subject;
+        refreshed = refreshed || subject.averageRating != null || Boolean(subject.coverUrl);
       } catch {
         // ignore
       }
     }
-    return refreshed ? this.db.listLibrary(userId, input) : response;
+    return refreshed;
   }
 
   private async backfillLibraryRatingsFromDetails(userId: string, medium: Medium, status: ShelfStatus, cookie: string) {
@@ -666,7 +695,8 @@ export class SyncService {
       const result = await this.client.getUserCollection(medium, status, page, cookie, peopleId);
       result.items.forEach((item) => {
         seenDoubanIds.add(item.subject.doubanId);
-        this.db.upsertSubject(item.subject);
+        const cachedSubject = this.db.getSubject(item.subject.medium, item.subject.doubanId);
+        this.db.upsertSubject(mergeSubjectAverageRating(item.subject, cachedSubject));
         this.db.upsertUserItem(userId, {
           medium,
           doubanId: item.subject.doubanId,
