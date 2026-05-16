@@ -80,13 +80,6 @@ export function getProxyErrorTone(error: Error | null) {
   return error.message.includes("图形验证") || error.message.includes("安全验证") ? "notice" : "form-error";
 }
 
-export function getSmsSendButtonLabel(retryAfterSeconds: number, hasSentCode: boolean) {
-  if (retryAfterSeconds > 0) {
-    return `${retryAfterSeconds}s 后重发`;
-  }
-  return hasSentCode ? "重新发送 SMS 验证码" : "发送 SMS 验证码";
-}
-
 interface UseDoubanLoginControllerOptions {
   onAuthenticated?: () => Promise<void> | void;
 }

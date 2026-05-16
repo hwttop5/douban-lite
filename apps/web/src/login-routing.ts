@@ -1,4 +1,4 @@
-export const LOGIN_SUCCESS_FALLBACK_PATH = "/me";
+const LOGIN_SUCCESS_FALLBACK_PATH = "/me";
 
 export function getRelativeLocation({
   pathname,

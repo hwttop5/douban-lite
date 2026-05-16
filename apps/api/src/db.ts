@@ -977,13 +977,3 @@ export class AppDatabase {
     }));
   }
 }
-
-export function emptyTotals() {
-  return shelfStatuses.flatMap((status) =>
-    (["movie", "music", "book", "game"] as Medium[]).map((medium) => ({
-      medium,
-      status,
-      count: 0
-    }))
-  );
-}

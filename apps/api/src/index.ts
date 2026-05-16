@@ -13,7 +13,7 @@ function writeDevTargets(port: number) {
     JSON.stringify(
       {
         apiPort: port,
-        apiTarget: `http://127.0.0.1:${port}`,
+        apiTarget: `http://localhost:${port}`,
         updatedAt: new Date().toISOString(),
         pid: process.pid
       },

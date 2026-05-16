@@ -18,4 +18,11 @@ apps/api/test-output/
 .codex-run/
 .playwright-mcp/
 design/
+/output/
+/apps/api/output/
+/apps/web/subject-detail-vitest.json
+/*-snapshot*.md
+/game-after-image-click.md
+/music-vote-before.md
+/playwright-network.txt
 /*.png

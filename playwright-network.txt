@@ -1,6 +1,0 @@
-36. [GET] http://127.0.0.1:5173/api/me/overview => [200] OK
-37. [GET] http://127.0.0.1:5173/api/library?medium=movie&page=1&status=wish => [200] OK
-43. [GET] http://127.0.0.1:5173/api/me/overview => [200] OK
-44. [GET] http://127.0.0.1:5173/api/library?medium=movie&status=wish&limit=15 => [200] OK
-
-Note: 39 static requests not shown, run with "static" option to see them.

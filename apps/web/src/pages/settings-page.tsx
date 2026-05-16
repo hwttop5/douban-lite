@@ -7,6 +7,8 @@ import { useAppContext } from "../app-context";
 import { LoadingButtonLabel, LoadingInline, PanelLoading } from "../components/loading-state";
 import { buildLoginPath, getRelativeLocation } from "../login-routing";
 
+const GITHUB_REPOSITORY_URL = "https://github.com/hwttop5/douban-lite";
+
 const sessionStatusLabels: Record<DoubanSessionStatus["status"], string> = {
   valid: "正常",
   invalid: "已失效",
@@ -27,6 +29,14 @@ async function triggerAndWaitForSync() {
     await sleep(1000);
   }
   return { ...job, status: "running" as const };
+}
+
+function GitHubIcon() {
+  return (
+    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.38-1.33-1.75-1.33-1.75-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.77.42-1.3.76-1.6-2.67-.31-5.47-1.34-5.47-5.93 0-1.31.47-2.39 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23.96-.27 1.99-.4 3.01-.4 1.02 0 2.05.13 3.01.4 2.29-1.55 3.3-1.23 3.3-1.23.65 1.66.24 2.88.12 3.18.76.83 1.23 1.91 1.23 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.58C20.57 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0Z" />
+    </svg>
+  );
 }
 
 export function SettingsPage() {
@@ -216,6 +226,34 @@ export function SettingsPage() {
             ) : syncMessage ? (
               <p className={syncMessage.includes("失败") ? "form-error" : "notice"}>{syncMessage}</p>
             ) : null}
+          </section>
+
+          <section className="panel settings-project-panel">
+            <div className="panel__header">
+              <div>
+                <strong>项目仓库</strong>
+                <p>源码、Issue 和更新记录都在这里维护。</p>
+              </div>
+            </div>
+            <a
+              className="settings-project-link"
+              href={GITHUB_REPOSITORY_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-labelledby="settings-github-link-label"
+              aria-describedby="settings-github-link-description"
+            >
+              <span className="settings-project-link__icon">
+                <GitHubIcon />
+              </span>
+              <span className="settings-project-link__body">
+                <strong id="settings-github-link-label">GitHub 仓库</strong>
+                <span id="settings-github-link-description">查看源码、Issue 和更新记录</span>
+              </span>
+              <span className="settings-project-link__arrow" aria-hidden="true">
+                ↗
+              </span>
+            </a>
           </section>
         </div>
       </div>

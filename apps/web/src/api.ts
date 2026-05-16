@@ -15,7 +15,6 @@ import type {
   SubjectCommentsResponse,
   SubjectCommentVoteResponse,
   SubjectDetailResponse,
-  SyncEventRecord,
   SyncJobRecord,
   TimelineActionResponse,
   TimelineCommentsResponse,
@@ -24,7 +23,7 @@ import type {
   UpdateLibraryStateInput
 } from "../../../packages/shared/src";
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 export const RENDER_DEMO_WARNING_MESSAGE =
   "这是免费实例；服务会休眠；本地 SQLite 不持久；重启或重新部署后数据可能丢失；不建议长期保存重要数据。";
 
@@ -221,10 +220,6 @@ export function logoutDoubanSession() {
   });
 }
 
-export function getDoubanSessionStatus() {
-  return request<DoubanSessionStatus>("/api/settings/douban-session/status");
-}
-
 export function getAuthMe() {
   return request<AuthMeResponse>("/api/session/me");
 }
@@ -241,8 +236,4 @@ export function triggerManualSync() {
 
 export function getSyncJob(jobId: string) {
   return request<SyncJobRecord>(`/api/sync/jobs/${jobId}`);
-}
-
-export function getSyncEvents() {
-  return request<{ items: SyncEventRecord[] }>("/api/sync/events");
 }

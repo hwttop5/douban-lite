@@ -121,7 +121,12 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("豆瓣会话状态")).toBeInTheDocument();
     expect(screen.getByText("菜单显示")).toBeInTheDocument();
     expect(screen.getByText("同步任务")).toBeInTheDocument();
+    expect(screen.getByText("项目仓库")).toBeInTheDocument();
     expect(screen.getByText("当前没有可用豆瓣会话，请前往登录页完成登录后再同步个人数据。")).toBeInTheDocument();
+    const repositoryLink = screen.getByRole("link", { name: "GitHub 仓库" });
+    expect(repositoryLink).toHaveAttribute("href", "https://github.com/hwttop5/douban-lite");
+    expect(repositoryLink).toHaveAttribute("target", "_blank");
+    expect(repositoryLink).toHaveAttribute("rel", "noreferrer");
 
     expect(screen.queryByText("代理豆瓣登录")).not.toBeInTheDocument();
     expect(screen.queryByText("如何获取 Cookie 并在 PWA 里登录")).not.toBeInTheDocument();

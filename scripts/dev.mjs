@@ -100,7 +100,7 @@ function killWorkspace(child) {
 
 const apiPort = await findAvailablePort(Number(process.env.PORT ?? 8787));
 const webPort = await findAvailablePort(Number(process.env.WEB_PORT ?? 5173));
-const apiTarget = `http://127.0.0.1:${apiPort}`;
+const apiTarget = `http://localhost:${apiPort}`;
 const rootDir = process.cwd();
 const tsxCliPath = path.join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
 const viteCliPath = path.join(rootDir, "node_modules", "vite", "bin", "vite.js");
