@@ -23,9 +23,20 @@ function writeDevTargets(port: number) {
   );
 }
 
+function maybeWriteDevTargets(port: number, nodeEnv: string) {
+  if (nodeEnv === "production") {
+    return;
+  }
+  try {
+    writeDevTargets(port);
+  } catch (error) {
+    console.warn("Unable to write local dev targets.", error);
+  }
+}
+
 const context = createApp();
 context.sync.start();
-writeDevTargets(context.config.port);
+maybeWriteDevTargets(context.config.port, context.config.nodeEnv);
 
 context.app.listen(context.config.port, () => {
   console.log(`douban-lite api listening on http://localhost:${context.config.port}`);
