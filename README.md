@@ -2,6 +2,9 @@
 
 `douban-lite` 是一个轻量的豆瓣 PWA，适合自托管使用。一个部署实例可以支持多人使用，但每个人都应使用自己的豆瓣账号登录，必要时再导入自己的豆瓣 Cookie；彼此的收藏、评分、标签、短评、动态和同步任务会分开存储。
 
+> 在线演示
+> Render 免费实例有冷启动，第一次打开可能会慢几秒到几十秒，但当前服务是可用的。[https://douban-lite.onrender.com](https://douban-lite.onrender.com) 仅作为演示，如需日常使用，最好部署在可靠的服务器上。
+
 > 提醒
 > `douban-lite` 需要接收真实登录态的豆瓣请求，并代替用户发起登录后的豆瓣操作。这类行为可能触发豆瓣风控，例如登录校验、Cookie 失效、临时限流，或账号侧的安全验证。最稳妥的使用方式是自己部署、自己使用。不要把它当成公开 SaaS，也不要让别人把真实的豆瓣登录态交给他们无法控制的第三方实例。
 
@@ -172,11 +175,12 @@ npm start
 ## 部署说明
 
 仓库内已经包含 `render.yaml`，可用于部署 Node Web Service。
+完整部署细节见 [docs/render-deploy.md](./docs/render-deploy.md)，版本记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ### Render Free 自用部署
 
 - 当前仓库默认采用 `单个 Render Free Web Service` 部署，前后端不拆分。
-- Render 直接运行现有 Node 进程：构建命令为 `npm ci && npm run build`，启动命令为 `npm start`。
+- Render 直接运行现有 Node 进程：构建命令为 `npm ci --include=dev && npm run build`，启动命令为 `npm start`。
 - API 继续托管 `apps/web/dist` 的前端静态产物，前端通过同源 `/api` 与后端通信，不需要额外设置 `VITE_API_BASE_URL`。
 
 免费版限制：
